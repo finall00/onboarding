@@ -1,56 +1,86 @@
 services:
+  api:
+    container_name: leadlists_api
+    build:
+      context: ./API
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT}:8080"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__User: "${RABBITMQ_DEFAULT_USER}"
+      RabbitMq__Password: "${RABBITMQ_DEFAULT_PASS}"
+      # ASP.NET Core environment specific settings
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT}"
+      ASPNETCORE_URLS: "http://+:8080"
+    networks:
+      - leadlists-net
+    depends_on:
+      - postgres
+      - rabbitmq
+    restart: unless-stopped
+  
+    
   postgres:
     image: postgres:15
-    container_name: postgres_db
-    restart: always
-    env_file: .env
+    container_name: postgres_data
     environment:
+      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    networks:
+      - leadlists-net
+    restart: unless-stopped
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
-    restart: always
-    env_file: .env
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     ports:
-      - "${RABBITMQ_PORT}:5672"    
-      - "${RABBITMQ_UI_PORT}:15672" 
+      - "${RABBITMQ_PORT}:5672"   # AMQP port for application connection
+      - "${RABBITMQ_UI_PORT}:15672" # Web management UI
+    networks:
+      - leadlists-net
     healthcheck:
-      test: ["CMD", "rabbitmqctl", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+        test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+        interval: 10s
+        timeout: 5s
+        retries: 10
+    restart: unless-stopped
 
-  # api:
-  #   build: ./api
-  #   container_name: api
-  #   depends_on:
-  #     - postgres
-  #     - rabbitmq
-  #   env_file: .env
-  #   environment:
-  #     ASPNETCORE_ENVIRONMENT: Development
-  #     ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
-  #     RabbitMQ__Host: "rabbitmq"
-  #     RabbitMQ__User: "${RABBITMQ_DEFAULT_USER}"
-  #     RabbitMQ__Pass: "${RABBITMQ_DEFAULT_PASS}"
-  #   ports:
-  #     - "5180:8080"
-  #   restart: always
+
+#  worker:
+#    container_name: leadlists_worker
+#    build:
+#      context: ./worker
+#      dockerfile: Dockerfile # Assuming a Dockerfile exists in the worker directory
+#    environment:
+#      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+#      RabbitMq__Host: "rabbitmq"
+#      RabbitMq__User: "${RABBITMQ_USER}"
+#      RabbitMq__Password: "${RABBITMQ_PASS}"
+#    networks:
+#      - leadlists-net
+#    depends_on:
+#      postgres:
+#        condition: service_healthy
+#      rabbitmq:
+#        condition: service_healthy
+#    restart: on-failure
+
 
 volumes:
+  rebbit_data:
   postgres_data:
+
+networks:
+  leadlists-net:
+    driver: bridge
+
