@@ -17,8 +17,8 @@ namespace API.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    email = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    source_url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     processed_count = table.Column<int>(type: "integer", nullable: false),
                     error_message = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -36,9 +36,9 @@ namespace API.Migrations
                 column: "created_at");
 
             migrationBuilder.CreateIndex(
-                name: "IX_lead_lists_email",
+                name: "IX_lead_lists_status",
                 table: "lead_lists",
-                column: "email");
+                column: "status");
         }
 
         /// <inheritdoc />

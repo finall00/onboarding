@@ -3,6 +3,7 @@ using API.Interfaces;
 using API.Services;
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
+using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,12 +26,25 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<ILeadListService, LeadListService>();
+builder.Services.AddScoped<IQueueService, QueueService>();
+builder.Services.AddScoped<IKubernetesJobService, KubernetesJobService>();
 
 
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-    
+// RabbitMQ
+builder.Services.AddSingleton<IConnectionFactory>(sp =>
+{
+    var uri = new Uri(builder.Configuration.GetConnectionString("RabbitMQ")!);
+    Console.WriteLine(uri.ToString());
+    return new ConnectionFactory
+    {
+        Uri = uri,
+        ConsumerDispatchConcurrency = Constants.DefaultConsumerDispatchConcurrency
+    };
+});
+
 // CORS config
 builder.Services.AddCors(opt =>
 {

@@ -9,8 +9,8 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       RabbitMq__Host: "rabbitmq"
-      RabbitMq__User: "${RABBITMQ_DEFAULT_USER}"
-      RabbitMq__Password: "${RABBITMQ_DEFAULT_PASS}"
+      RabbitMq__User: "${RABBITMQ_USER}"
+      RabbitMq__Password: "${RABBITMQ_PASS}"
       # ASP.NET Core environment specific settings
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT}"
       ASPNETCORE_URLS: "http://+:8080"

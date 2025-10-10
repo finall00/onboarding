@@ -20,12 +20,12 @@ public class LeadList
 
     [Required]
     [MaxLength(500)]
-    [Column("description")]
+    [Column("source_url")]
     public string SourceUrl { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(20)]
-    [Column("email")]
+    [Column("status")]
     public LeadListStatus Status { get; set; } = LeadListStatus.Pending;
 
     [Required]

@@ -1,126 +1,78 @@
-namespace API.Services;
-
 using System.Text;
+using System.Text.Json;
+using API.DTOs;
+using API.Interfaces;
 using RabbitMQ.Client;
 
-public class QueueService(IConnectionFactory connectionFactory)
+namespace API.Services;
+
+public class QueueService : IQueueService
 {
-    private const int MillisecondsToFiveMinutes = 300000;
-    private IConnection? _connection;
-    private const string RetryExchangeName = "RetryExchange";
-
-    public async Task SendMessage(string queueName, string messageJson)
+    private readonly IConnectionFactory _connectionFactory;
+    private readonly ILogger<QueueService> _logger;
+    private IConnection _conn;
+    
+    private const string ExchangeName = "leadlists";
+    private const string RoutingKey = "leadlist.created";
+    
+    public QueueService(IConnectionFactory connectionFactory, ILogger<QueueService> logger)
     {
-        if (_connection is null || _connection.IsOpen == false)
-            _connection = await connectionFactory.CreateConnectionAsync();
-
-        await using var model = await _connection.CreateChannelAsync();
-
-        await model.QueueDeclareAsync(
-            queueName,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            new Dictionary<string, object>
-                { { "x-consumer-timeout", "undefined" } }!);
-
-        var properties = new BasicProperties
-        {
-            DeliveryMode = DeliveryModes.Persistent
-        };
-
-        await model.BasicPublishAsync(
-            string.Empty,
-            queueName,
-            false,
-            properties,
-            Encoding.UTF8.GetBytes(messageJson));
-
-        await model.CloseAsync();
+        _connectionFactory = connectionFactory;
+        _logger = logger;
     }
-
-    public async Task SendDelayedMessageForRetryExchange(
-        string queueName,
-        string messageJson,
-        int time,
-        string routingKey)
+    
+    public  async Task PublishLeadListCreated(LeadListCreatedMsg msg)
     {
-        if (_connection is null || _connection.IsOpen == false)
-            _connection = await connectionFactory.CreateConnectionAsync();
-
-        await using var model = await _connection.CreateChannelAsync();
-        
-        await model.ExchangeDeclareAsync(RetryExchangeName,
-            ExchangeType.Direct, 
-            true, 
-            false);
-        
-        await model.QueueDeclareAsync(queueName, false, false, true,
-            new Dictionary<string, object>
+        try
+        {
+            if (!IsConnected(_conn))
             {
-                { "x-message-ttl", time },
-                { "x-dead-letter-exchange", RetryExchangeName },
-                { "x-dead-letter-routing-key", routingKey },
-                { "x-expires", time + MillisecondsToFiveMinutes }
-            }!);
-        
-        await model.QueueBindAsync(routingKey, RetryExchangeName, routingKey);
+                _conn = await _connectionFactory.CreateConnectionAsync();
+            }
 
-        var properties = new BasicProperties
-        {
-            DeliveryMode = DeliveryModes.Persistent
-        };
+            await using var chan = await _conn.CreateChannelAsync();
+            
+            
+            
+            _logger.LogInformation("Declaring exchange '{ExchangeName}' as topic", ExchangeName);
 
-        await model.BasicPublishAsync(
-            string.Empty,
-            queueName,
-            false,
-            properties,
-            Encoding.UTF8.GetBytes(messageJson));
+            await chan.ExchangeDeclareAsync(
+                exchange: ExchangeName,
+                type: ExchangeType.Topic,
+                durable: true,
+                autoDelete:false
+                );
 
-        await model.CloseAsync();
-    }
+            var msgBody = JsonSerializer.Serialize(msg);
+            var bodyBytes = Encoding.UTF8.GetBytes(msgBody);
 
-    public async Task SendMessageWithDelay(string exchangeName, string messageJson,
-        string routingKey, int delayMilliseconds)
-    {
-        if (_connection is null || !_connection.IsOpen)
-            _connection = await connectionFactory.CreateConnectionAsync();
-
-        await using var model = await _connection.CreateChannelAsync();
-
-        await model.ExchangeDeclareAsync(
-            exchange: exchangeName,
-            type: "x-delayed-message",
-            durable: true,
-            autoDelete: false,
-            arguments: new Dictionary<string, object>
+            var properties = new BasicProperties
             {
-                { "x-delayed-type", "direct" }
-            }!);
+                DeliveryMode = DeliveryModes.Persistent
+            };
+            _logger.LogInformation("Publishing message to exchange '{ExchangeName}' with routing key '{RoutingKey}'", ExchangeName, RoutingKey);
 
-        await model.QueueBindAsync(
-            queue: routingKey,
-            exchange: exchangeName,
-            routingKey: routingKey
-        );
-
-        var props = new BasicProperties
+            await chan.BasicPublishAsync(
+                exchange: ExchangeName,
+                routingKey: RoutingKey,
+                mandatory: false,
+                basicProperties: properties,
+                body: bodyBytes
+            );
+            
+            Console.WriteLine("eu estive aqui aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        }
+        catch (Exception ex)
         {
-            Headers = new Dictionary<string, object?>
-                { ["x-delay"] = delayMilliseconds },
-            DeliveryMode = DeliveryModes.Persistent
-        };
-
-        var body = Encoding.UTF8.GetBytes(messageJson);
-
-        await model.BasicPublishAsync(
-            exchangeName,
-            routingKey,
-            false,
-            props,
-            body);
-
-        await model.CloseAsync();
+            _logger.LogError(ex, "Failed to publish message to Queue. msg: {msg}", msg);
+            throw;
+        }
     }
+
+    private static bool IsConnected(IConnection connection)
+    {
+        return connection != null && connection.IsOpen;
+    }
+    
+    
 }

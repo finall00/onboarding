@@ -47,6 +47,7 @@ public class LeadListController : ControllerBase
     )
     {
         var result = await _leadListService.GetAll(page, pageSize, status, q);
+        Console.WriteLine(result);
         return Ok(result);
     }
 

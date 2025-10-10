@@ -10,12 +10,15 @@ public class LeadListService : ILeadListService
 {
     private readonly AppDbContext _context;
     private readonly ILogger<LeadListService> _logger;
+    private readonly IQueueService _queueService;
+    private readonly IKubernetesJobService _kubernetesJobService;
 
-
-    public LeadListService(AppDbContext context, ILogger<LeadListService> logger)
+    public LeadListService(AppDbContext context, ILogger<LeadListService> logger, IQueueService queueService, IKubernetesJobService kubernetesJobService)
     {
         _context = context;
         _logger = logger;
+        _queueService = queueService;
+        _kubernetesJobService = kubernetesJobService;
     }
 
 
@@ -67,18 +70,13 @@ public class LeadListService : ILeadListService
     public async Task<(LeadListResponse? Response, string? ErrorMessage)> Create(LeadListCreateRequest request)
     {
         
-        if (string.IsNullOrEmpty(request.Name) || request.Name.Length > 100)
-        {
-            return (null, "Invalid name (max 100 characters)");
-        }
-        
-        
         var leadList = new LeadList
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             SourceUrl = request.SourceUrl.Trim(),
             Status = LeadListStatus.Pending,
+            CorrelationId = Guid.NewGuid(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -88,10 +86,16 @@ public class LeadListService : ILeadListService
         _logger.LogInformation("Lead list {LeadListId} created with CorrelationId {CorrelationId}", leadList.Id,
             leadList.CorrelationId);
 
-        // --- Orchestration Logic ---
-        // After saving, publish the event and create the job
-        // await _rabbitMqPublisher.PublishLeadListCreated(leadList.Id, leadList.CorrelationId, leadList.SourceUrl);
-        // await _kubernetesJobService.CreateLeadListJob(leadList.Id, leadList.CorrelationId);
+        var msg = new LeadListCreatedMsg
+        {
+            LeadListId = leadList.Id,
+            CorrelationId = leadList.CorrelationId,
+            SourceUrl = leadList.SourceUrl,
+            CreatedAt = leadList.CreatedAt
+        };
+        
+        await _queueService.PublishLeadListCreated(msg);
+        await _kubernetesJobService.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
 
         return (MapToResponse(leadList), null);
     }
@@ -192,3 +196,127 @@ public class LeadListService : ILeadListService
         };
     }
 }
+
+
+
+//
+// using System.Text;
+// using System.Text.Json;
+// using RabbitMQ.Client;
+//
+// namespace LeadListsApi.Services;
+//
+// public class RabbitMqPublisher : IRabbitMqPublisher
+// {
+//     private readonly IConnection _connection;
+//     private readonly IModel _channel;
+//     private readonly ILogger<RabbitMqPublisher> _logger;
+//     private readonly string _exchangeName;
+//     private readonly string _routingKey;
+//
+//     public RabbitMqPublisher(IConfiguration configuration, ILogger<RabbitMqPublisher> logger)
+//     {
+//         _logger = logger;
+//
+//         var host = configuration["RabbitMQ:Host"] ?? "localhost";
+//         var port = int.Parse(configuration["RabbitMQ:Port"] ?? "5672");
+//         var username = configuration["RabbitMQ:Username"] ?? "admin";
+//         var password = configuration["RabbitMQ:Password"] ?? "admin123";
+//         _exchangeName = configuration["RabbitMQ:Exchange"] ?? "leadlists";
+//         _routingKey = configuration["RabbitMQ:RoutingKey"] ?? "leadlist.created";
+//
+//         try
+//         {
+//             var factory = new ConnectionFactory
+//             {
+//                 HostName = host,
+//                 Port = port,
+//                 UserName = username,
+//                 Password = password,
+//                 DispatchConsumersAsync = true
+//             };
+//
+//             _connection = factory.CreateConnection();
+//             _channel = _connection.CreateModel();
+//
+//             // Declarar exchange (tipo topic)
+//             _channel.ExchangeDeclare(
+//                 exchange: _exchangeName,
+//                 type: ExchangeType.Topic,
+//                 durable: true,
+//                 autoDelete: false);
+//
+//             // Declarar fila para o worker
+//             _channel.QueueDeclare(
+//                 queue: "leadlists.worker",
+//                 durable: true,
+//                 exclusive: false,
+//                 autoDelete: false);
+//
+//             // Bind da fila com a exchange
+//             _channel.QueueBind(
+//                 queue: "leadlists.worker",
+//                 exchange: _exchangeName,
+//                 routingKey: _routingKey);
+//
+//             _logger.LogInformation(
+//                 "RabbitMQ conectado: {Host}:{Port}, Exchange: {Exchange}",
+//                 host, port, _exchangeName);
+//         }
+//         catch (Exception ex)
+//         {
+//             _logger.LogError(ex, "Erro ao conectar no RabbitMQ");
+//             throw;
+//         }
+//     }
+//
+//     public Task PublishLeadListCreated(Guid leadListId, Guid correlationId, string sourceUrl)
+//     {
+//         try
+//         {
+//             var message = new
+//             {
+//                 leadListId = leadListId,
+//                 correlationId = correlationId,
+//                 sourceUrl = sourceUrl,
+//                 createdAt = DateTime.UtcNow
+//             };
+//
+//             var json = JsonSerializer.Serialize(message);
+//             var body = Encoding.UTF8.GetBytes(json);
+//
+//             var properties = _channel.CreateBasicProperties();
+//             properties.Persistent = true;
+//             properties.ContentType = "application/json";
+//             properties.CorrelationId = correlationId.ToString();
+//
+//             _channel.BasicPublish(
+//                 exchange: _exchangeName,
+//                 routingKey: _routingKey,
+//                 basicProperties: properties,
+//                 body: body);
+//
+//             _logger.LogInformation(
+//                 "Mensagem publicada: LeadListId={LeadListId}, CorrelationId={CorrelationId}",
+//                 leadListId, correlationId);
+//
+//             return Task.CompletedTask;
+//         }
+//         catch (Exception ex)
+//         {
+//             _logger.LogError(
+//                 ex,
+//                 "Erro ao publicar mensagem para LeadListId={LeadListId}",
+//                 leadListId);
+//             throw;
+//         }
+//     }
+//
+//     public void Dispose()
+//     {
+//         _channel?.Close();
+//         _connection?.Close();
+//         _channel?.Dispose();
+//         _connection?.Dispose();
+//     }
+// }
