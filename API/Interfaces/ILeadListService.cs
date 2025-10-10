@@ -1,4 +1,4 @@
-using API.DTOs;
+using API.Domain.DTOs;
 
 namespace API.Interfaces;
 

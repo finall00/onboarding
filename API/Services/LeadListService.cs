@@ -1,7 +1,7 @@
-using API.Data;
-using API.DTOs;
+using API.Domain.DTOs;
+using API.Domain.Models;
+using API.Infrastructure.Data;
 using API.Interfaces;
-using API.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace API.Services;
@@ -10,14 +10,14 @@ public class LeadListService : ILeadListService
 {
     private readonly AppDbContext _context;
     private readonly ILogger<LeadListService> _logger;
-    private readonly IQueueService _queueService;
+    private readonly IQueuePublisher _queuePublisher;
     private readonly IKubernetesJobService _kubernetesJobService;
 
-    public LeadListService(AppDbContext context, ILogger<LeadListService> logger, IQueueService queueService, IKubernetesJobService kubernetesJobService)
+    public LeadListService(AppDbContext context, ILogger<LeadListService> logger, IQueuePublisher queuePublisher, IKubernetesJobService kubernetesJobService)
     {
         _context = context;
         _logger = logger;
-        _queueService = queueService;
+        _queuePublisher = queuePublisher;
         _kubernetesJobService = kubernetesJobService;
     }
 
@@ -94,7 +94,7 @@ public class LeadListService : ILeadListService
             CreatedAt = leadList.CreatedAt
         };
         
-        await _queueService.PublishLeadListCreated(msg);
+        await _queuePublisher.PublishLeadListCreated(msg);
         await _kubernetesJobService.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
 
         return (MapToResponse(leadList), null);

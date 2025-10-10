@@ -3,11 +3,11 @@ using k8s;
 using k8s.Exceptions;
 using k8s.Models;
 
-namespace API.Services;
+namespace API.Infrastructure.Kubernetes;
 
 public class KubernetesJobService : IKubernetesJobService
 {
-    private readonly Kubernetes _client;
+    private readonly k8s.Kubernetes _client;
     private readonly ILogger<KubernetesJobService> _logger;
     private const string NameSpace = "dev";
 
@@ -18,13 +18,13 @@ public class KubernetesJobService : IKubernetesJobService
         try
         {
             var config = KubernetesClientConfiguration.InClusterConfig();
-            _client = new Kubernetes(config);
+            _client = new k8s.Kubernetes(config);
             _logger.LogInformation("Loaded in-cluster Kubernetes configuration.");
         }
         catch (KubeConfigException)
         {
             var config = KubernetesClientConfiguration.BuildConfigFromConfigFile();
-            _client = new Kubernetes(config);
+            _client = new k8s.Kubernetes(config);
             _logger.LogInformation("Loaded local kubeconfig configuration.");
         }
         

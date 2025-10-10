@@ -1,7 +1,7 @@
-using API.Models;
+using API.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace API.Data;
+namespace API.Infrastructure.Data;
 
 public class AppDbContext : DbContext
 {
@@ -22,5 +22,4 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.CreatedAt);
         });
     }
-    
 }

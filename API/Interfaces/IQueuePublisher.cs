@@ -1,8 +1,8 @@
-using API.DTOs;
+using API.Domain.DTOs;
 
 namespace API.Interfaces;
 
-public interface IQueueService
+public interface IQueuePublisher
 {
     Task PublishLeadListCreated(LeadListCreatedMsg msg);
 }

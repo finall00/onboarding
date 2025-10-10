@@ -1,21 +1,21 @@
 using System.Text;
 using System.Text.Json;
-using API.DTOs;
+using API.Domain.DTOs;
 using API.Interfaces;
 using RabbitMQ.Client;
 
-namespace API.Services;
+namespace API.Infrastructure.RabbitMq;
 
-public class QueueService : IQueueService
+public class QueuePublisher : IQueuePublisher
 {
     private readonly IConnectionFactory _connectionFactory;
-    private readonly ILogger<QueueService> _logger;
+    private readonly ILogger<QueuePublisher> _logger;
     private IConnection _conn;
     
     private const string ExchangeName = "leadlists";
     private const string RoutingKey = "leadlist.created";
     
-    public QueueService(IConnectionFactory connectionFactory, ILogger<QueueService> logger)
+    public QueuePublisher(IConnectionFactory connectionFactory, ILogger<QueuePublisher> logger)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
@@ -31,8 +31,6 @@ public class QueueService : IQueueService
             }
 
             await using var chan = await _conn.CreateChannelAsync();
-            
-            
             
             _logger.LogInformation("Declaring exchange '{ExchangeName}' as topic", ExchangeName);
 
@@ -60,7 +58,6 @@ public class QueueService : IQueueService
                 body: bodyBytes
             );
             
-            Console.WriteLine("eu estive aqui aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         }
         catch (Exception ex)
         {
@@ -69,9 +66,9 @@ public class QueueService : IQueueService
         }
     }
 
-    private static bool IsConnected(IConnection connection)
+    private static bool IsConnected(IConnection? connection)
     {
-        return connection != null && connection.IsOpen;
+        return connection is { IsOpen: true };
     }
     
     

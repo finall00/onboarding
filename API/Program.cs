@@ -1,4 +1,6 @@
-using API.Data;
+using API.Infrastructure.Data;
+using API.Infrastructure.Kubernetes;
+using API.Infrastructure.RabbitMq;
 using API.Interfaces;
 using API.Services;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +28,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<ILeadListService, LeadListService>();
-builder.Services.AddScoped<IQueueService, QueueService>();
+builder.Services.AddScoped<IQueuePublisher, QueuePublisher>();
 builder.Services.AddScoped<IKubernetesJobService, KubernetesJobService>();
 
 

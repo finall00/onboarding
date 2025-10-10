@@ -1,6 +1,5 @@
-using API.DTOs;
+using API.Domain.DTOs;
 using API.Interfaces;
-using API.Models;
 using Microsoft.AspNetCore.Mvc;
 using FluentValidation;
 

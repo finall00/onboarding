@@ -1,4 +1,4 @@
-namespace API.DTOs;
+namespace API.Domain.DTOs;
 
 public class LeadListResponse
 {
