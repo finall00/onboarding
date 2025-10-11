@@ -6,16 +6,16 @@ using RabbitMQ.Client;
 
 namespace API.Infrastructure.RabbitMq;
 
-public class QueuePublisher : IQueuePublisher
+public class RabbitMqPublisher : IRabbitMqPublisher
 {
     private readonly IConnectionFactory _connectionFactory;
-    private readonly ILogger<QueuePublisher> _logger;
+    private readonly ILogger<RabbitMqPublisher> _logger;
     private IConnection _conn;
     
     private const string ExchangeName = "leadlists";
     private const string RoutingKey = "leadlist.created";
     
-    public QueuePublisher(IConnectionFactory connectionFactory, ILogger<QueuePublisher> logger)
+    public RabbitMqPublisher(IConnectionFactory connectionFactory, ILogger<RabbitMqPublisher> logger)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
@@ -70,6 +70,4 @@ public class QueuePublisher : IQueuePublisher
     {
         return connection is { IsOpen: true };
     }
-    
-    
 }

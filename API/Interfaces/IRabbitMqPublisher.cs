@@ -2,7 +2,7 @@ using API.Domain.DTOs;
 
 namespace API.Interfaces;
 
-public interface IQueuePublisher
+public interface IRabbitMqPublisher
 {
     Task PublishLeadListCreated(LeadListCreatedMsg msg);
 }

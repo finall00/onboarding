@@ -5,6 +5,7 @@ using API.Interfaces;
 using API.Services;
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,21 +29,50 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<ILeadListService, LeadListService>();
-builder.Services.AddScoped<IQueuePublisher, QueuePublisher>();
+builder.Services.AddScoped<IRabbitMqPublisher, RabbitMqPublisher>();
 builder.Services.AddScoped<IKubernetesJobService, KubernetesJobService>();
 
 
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+//RabbitMQ load settings
+builder.Services.AddOptions<RabbitMqSettings>()
+    .Configure<IConfiguration>((settings, configuration) =>
+    {
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_HOST")))
+            settings.Host = Environment.GetEnvironmentVariable("RABBITMQ_HOST")!;
+
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_PORT")))
+            settings.Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT")!);
+
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_USER")))
+            settings.Username = Environment.GetEnvironmentVariable("RABBITMQ_USER")!;
+
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_PASS")))
+            settings.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASS")!;
+
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_EXCHANGE")))
+            settings.Exchange = Environment.GetEnvironmentVariable("RABBITMQ_EXCHANGE")!;
+
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_QUEUE")))
+            settings.QueueName = Environment.GetEnvironmentVariable("RABBITMQ_QUEUE")!;
+
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_ROUTING_KEY")))
+            settings.RoutingKey = Environment.GetEnvironmentVariable("RABBITMQ_ROUTING_KEY")!;
+
+    });
+
 // RabbitMQ
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
-    var uri = new Uri(builder.Configuration.GetConnectionString("RabbitMQ")!);
-    Console.WriteLine(uri.ToString());
+    var settings = sp.GetRequiredService<IOptions<RabbitMqSettings>>().Value;
     return new ConnectionFactory
     {
-        Uri = uri,
+        HostName = settings.Host,
+        Port = settings.Port,
+        UserName = settings.Username,
+        Password = settings.Password,
         ConsumerDispatchConcurrency = Constants.DefaultConsumerDispatchConcurrency
     };
 });
