@@ -20,9 +20,6 @@ builder.Services.AddSwaggerGen();
 // TODO: valid All inputs with  validator
 // TODO: Create a worker for consume the queue
 
-
-    
-
 // Postgres
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -30,49 +27,27 @@ builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionStrin
 
 builder.Services.AddScoped<ILeadListService, LeadListService>();
 builder.Services.AddScoped<IRabbitMqPublisher, RabbitMqPublisher>();
-builder.Services.AddScoped<IKubernetesJobService, KubernetesJobService>();
 
+builder.Services.AddScoped<IKubernetesJobService, KubernetesJobService>();
 
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 //RabbitMQ load settings
-builder.Services.AddOptions<RabbitMqSettings>()
-    .Configure<IConfiguration>((settings, configuration) =>
-    {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_HOST")))
-            settings.Host = Environment.GetEnvironmentVariable("RABBITMQ_HOST")!;
+builder.Services.Configure<RabbitMqSettings>(builder.Configuration.GetSection("RabbitMq"));
 
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_PORT")))
-            settings.Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT")!);
-
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_USER")))
-            settings.Username = Environment.GetEnvironmentVariable("RABBITMQ_USER")!;
-
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_PASS")))
-            settings.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASS")!;
-
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_EXCHANGE")))
-            settings.Exchange = Environment.GetEnvironmentVariable("RABBITMQ_EXCHANGE")!;
-
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_QUEUE")))
-            settings.QueueName = Environment.GetEnvironmentVariable("RABBITMQ_QUEUE")!;
-
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RABBITMQ_ROUTING_KEY")))
-            settings.RoutingKey = Environment.GetEnvironmentVariable("RABBITMQ_ROUTING_KEY")!;
-
-    });
 
 // RabbitMQ
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<RabbitMqSettings>>().Value;
+    Console.WriteLine(settings.Host);
     return new ConnectionFactory
     {
         HostName = settings.Host,
         Port = settings.Port,
-        UserName = settings.Username,
-        Password = settings.Password,
+        UserName = settings.User,
+        Password = settings.Pass,
         ConsumerDispatchConcurrency = Constants.DefaultConsumerDispatchConcurrency
     };
 });
@@ -88,29 +63,26 @@ builder.Services.AddCors(opt =>
     });
 });
 
-
 var app = builder.Build();
 
+var config = app.Services.GetRequiredService<IConfiguration>();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || true)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
 }
 
 app.UseCors("AllowFrontend");
-
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
-// Health Check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithName("HealthCheck");
-    
 
 app.Run();
-
-

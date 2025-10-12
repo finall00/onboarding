@@ -2,8 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace API.Domain.Models;
-
-    
     
 [Table("lead_lists")]
 public class LeadList
@@ -46,4 +44,15 @@ public class LeadList
     [Required]
     [Column("correlation_id")]
     public Guid CorrelationId { get; set; } = Guid.NewGuid();
+
+
+    public bool IsEditable()
+    {
+        return this.Status == LeadListStatus.Failed || this.Status == LeadListStatus.Pending;
+    }
+    public bool IsDeletable()
+    {
+        return this.Status == LeadListStatus.Failed || this.Status == LeadListStatus.Pending;
+    }
 }
+

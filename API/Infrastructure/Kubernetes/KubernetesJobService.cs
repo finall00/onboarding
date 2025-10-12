@@ -15,6 +15,7 @@ public class KubernetesJobService : IKubernetesJobService
     {
         _logger = logger;
         
+        
         try
         {
             var config = KubernetesClientConfiguration.InClusterConfig();
@@ -23,16 +24,16 @@ public class KubernetesJobService : IKubernetesJobService
         }
         catch (KubeConfigException)
         {
-            var config = KubernetesClientConfiguration.BuildConfigFromConfigFile();
-            _client = new k8s.Kubernetes(config);
+            // var config = KubernetesClientConfiguration.BuildConfigFromConfigFile();
+            // _client = new k8s.Kubernetes(config);
             _logger.LogInformation("Loaded local kubeconfig configuration.");
         }
-        
     }
 
     public async Task CreateWorkerJobAsync(Guid leadListId, Guid correlationId)
     {
-        var jobName = $"worker-job-{leadListId}";
+        var name = leadListId.ToString("N").ToLower();
+        var jobName = $"worker-job-{name}";
         _logger.LogInformation("Creating Kubernetes job {jobName}", jobName);
 
         var job = new V1Job

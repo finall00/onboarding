@@ -21,20 +21,15 @@ public class LeadListService : ILeadListService
         _kubernetesJobService = kubernetesJobService;
     }
 
-
     public async Task<PagedResult<LeadListResponse>> GetAll(int page, int pageSize, string? status, string? q)
     {
         var query = _context.LeadLists.AsQueryable();
 
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<LeadListStatus>(status, true, out var statusEnum))
-        {
             query = query.Where(l => l.Status == statusEnum);
-        }
 
         if (!string.IsNullOrEmpty(q))
-        {
             query = query.Where(l => l.Name.Contains(q));
-        }
 
         var total = await query.CountAsync();
 
@@ -58,15 +53,12 @@ public class LeadListService : ILeadListService
     {
         var leadList = await _context.LeadLists.FindAsync(id);
         if (leadList != null)
-        {
             return MapToResponse(leadList);
-        }
 
         _logger.LogError("LeadList with id {id} was not found", id);
         return null;
     }
 
-    //TODO: Implement the rabbitMq publisher
     public async Task<(LeadListResponse? Response, string? ErrorMessage)> Create(LeadListCreateRequest request)
     {
         
@@ -95,7 +87,7 @@ public class LeadListService : ILeadListService
         };
         
         await _rabbitMqPublisher.PublishLeadListCreated(msg);
-        await _kubernetesJobService.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
+        // await _kubernetesJobService.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
 
         return (MapToResponse(leadList), null);
     }
@@ -110,12 +102,8 @@ public class LeadListService : ILeadListService
             return (null, "Lead list not found");
         }
 
-        if (leadList.Status != LeadListStatus.Pending && leadList.Status != LeadListStatus.Failed)
-        {
-            return (null,
-                $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
-        }
-
+        if (!leadList.IsEditable())
+            return (null, $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
        
         leadList.Name = request.Name.Trim();
         leadList.SourceUrl = request.SourceUrl.Trim();
@@ -137,10 +125,8 @@ public class LeadListService : ILeadListService
             return (false, "Lead not found");
         }
 
-        if (leadList.Status != LeadListStatus.Pending && leadList.Status != LeadListStatus.Failed)
-        {
+        if (!leadList.IsDeletable())
             return (false, $"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
-        }
         
         _context.LeadLists.Remove(leadList);
         await _context.SaveChangesAsync();
@@ -149,7 +135,6 @@ public class LeadListService : ILeadListService
         return (true, null);
     }
 
-    
     //TODO: Implement the rabbitMq publisher
     public async Task<(LeadListResponse? Response, string? ErrorMessage)> Reprocess(Guid id)
     {
@@ -160,11 +145,9 @@ public class LeadListService : ILeadListService
             return (null, "Lead list not found");
         }
 
-        if (leadList.Status != LeadListStatus.Pending)
-        {
+        if (leadList.Status != LeadListStatus.Failed)
             return (null,
                 $"Cannot reprocess leadlist with status {leadList.Status}. Only Failed list can be reprocessed. ");
-        }
 
         leadList.Status = LeadListStatus.Pending;
         leadList.ProcessedCount = 0;
@@ -172,17 +155,14 @@ public class LeadListService : ILeadListService
         leadList.CorrelationId = Guid.NewGuid();
         leadList.UpdatedAt = DateTime.UtcNow;
         
-        
         await _context.SaveChangesAsync();
         _logger.LogInformation("Lead list {LeadListId} marked for reprocessing", leadList.Id);
-
 
         return (MapToResponse(leadList), null);
     }
 
-    private static LeadListResponse MapToResponse(LeadList leadList)
-    {
-        return new LeadListResponse
+    private static LeadListResponse MapToResponse(LeadList leadList) => 
+         new LeadListResponse
         {
             Id = leadList.Id,
             Name = leadList.Name,
@@ -194,129 +174,4 @@ public class LeadListService : ILeadListService
             UpdatedAt = leadList.UpdatedAt,
             CorrelationId = leadList.CorrelationId
         };
-    }
 }
-
-
-
-//
-// using System.Text;
-// using System.Text.Json;
-// using RabbitMQ.Client;
-//
-// namespace LeadListsApi.Services;
-//
-// public class RabbitMqPublisher : IRabbitMqPublisher
-// {
-//     private readonly IConnection _connection;
-//     private readonly IModel _channel;
-//     private readonly ILogger<RabbitMqPublisher> _logger;
-//     private readonly string _exchangeName;
-//     private readonly string _routingKey;
-//
-//     public RabbitMqPublisher(IConfiguration configuration, ILogger<RabbitMqPublisher> logger)
-//     {
-//         _logger = logger;
-//
-//         var host = configuration["RabbitMQ:Host"] ?? "localhost";
-//         var port = int.Parse(configuration["RabbitMQ:Port"] ?? "5672");
-//         var username = configuration["RabbitMQ:Username"] ?? "admin";
-//         var password = configuration["RabbitMQ:Password"] ?? "admin123";
-//         _exchangeName = configuration["RabbitMQ:Exchange"] ?? "leadlists";
-//         _routingKey = configuration["RabbitMQ:RoutingKey"] ?? "leadlist.created";
-//
-//         try
-//         {
-//             var factory = new ConnectionFactory
-//             {
-//                 HostName = host,
-//                 Port = port,
-//                 UserName = username,
-//                 Password = password,
-//                 DispatchConsumersAsync = true
-//             };
-//
-//             _connection = factory.CreateConnection();
-//             _channel = _connection.CreateModel();
-//
-//             // Declarar exchange (tipo topic)
-//             _channel.ExchangeDeclare(
-//                 exchange: _exchangeName,
-//                 type: ExchangeType.Topic,
-//                 durable: true,
-//                 autoDelete: false);
-//
-//             // Declarar fila para o worker
-//             _channel.QueueDeclare(
-//                 queue: "leadlists.worker",
-//                 durable: true,
-//                 exclusive: false,
-//                 autoDelete: false);
-//
-//             // Bind da fila com a exchange
-//             _channel.QueueBind(
-//                 queue: "leadlists.worker",
-//                 exchange: _exchangeName,
-//                 routingKey: _routingKey);
-//
-//             _logger.LogInformation(
-//                 "RabbitMQ conectado: {Host}:{Port}, Exchange: {Exchange}",
-//                 host, port, _exchangeName);
-//         }
-//         catch (Exception ex)
-//         {
-//             _logger.LogError(ex, "Erro ao conectar no RabbitMQ");
-//             throw;
-//         }
-//     }
-//
-//     public Task PublishLeadListCreated(Guid leadListId, Guid correlationId, string sourceUrl)
-//     {
-//         try
-//         {
-//             var message = new
-//             {
-//                 leadListId = leadListId,
-//                 correlationId = correlationId,
-//                 sourceUrl = sourceUrl,
-//                 createdAt = DateTime.UtcNow
-//             };
-//
-//             var json = JsonSerializer.Serialize(message);
-//             var body = Encoding.UTF8.GetBytes(json);
-//
-//             var properties = _channel.CreateBasicProperties();
-//             properties.Persistent = true;
-//             properties.ContentType = "application/json";
-//             properties.CorrelationId = correlationId.ToString();
-//
-//             _channel.BasicPublish(
-//                 exchange: _exchangeName,
-//                 routingKey: _routingKey,
-//                 basicProperties: properties,
-//                 body: body);
-//
-//             _logger.LogInformation(
-//                 "Mensagem publicada: LeadListId={LeadListId}, CorrelationId={CorrelationId}",
-//                 leadListId, correlationId);
-//
-//             return Task.CompletedTask;
-//         }
-//         catch (Exception ex)
-//         {
-//             _logger.LogError(
-//                 ex,
-//                 "Erro ao publicar mensagem para LeadListId={LeadListId}",
-//                 leadListId);
-//             throw;
-//         }
-//     }
-//
-//     public void Dispose()
-//     {
-//         _channel?.Close();
-//         _connection?.Close();
-//         _channel?.Dispose();
-//         _connection?.Dispose();
-//     }
-// }
