@@ -7,7 +7,7 @@ namespace leadListAPI.Infrastructure.WorkerJobCreator.Kubernetes;
 
 public class KubernetesJobCreator : IJobCreator
 {
-    private readonly k8s.Kubernetes? _client;
+    private readonly k8s.Kubernetes _client;
     private readonly ILogger<KubernetesJobCreator> _logger;
     private readonly string _jobTemplateContent;
     private const string NameSpace = "dev";
@@ -20,15 +20,24 @@ public class KubernetesJobCreator : IJobCreator
         try
         {
             config = KubernetesClientConfiguration.InClusterConfig();
+            _client = new k8s.Kubernetes(config);
+            _logger.LogInformation("Using in-cluster config");
             
         }
         catch (KubernetesClientException)
         {
             _logger.LogWarning("Cant Initialize Kubernetes client using in-cluster config");
             config =  KubernetesClientConfiguration.BuildDefaultConfig();
+            _client = new k8s.Kubernetes(config);
             _logger.LogInformation("Load from kubeconfig local");
         }
-        _jobTemplateContent = File.ReadAllText("./worker/job-template.yaml");
+        
+        var path = Path.Combine(AppContext.BaseDirectory, "worker", "job-template.yaml");
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"Worker Job template not found at {path}");
+
+        _jobTemplateContent = File.ReadAllText(path);
+
         _logger.LogInformation("Template job loaded.");
     }
 
@@ -37,10 +46,10 @@ public class KubernetesJobCreator : IJobCreator
         try
         {
             var finalYaml = _jobTemplateContent
-                .Replace("{{lead-list-id}}", leadListId.ToString())
-                .Replace("{{correlation-id}}", correlationId.ToString());
+                .Replace("{{leadListsId}}", leadListId.ToString())
+                .Replace("{{correlationId}}", correlationId.ToString());
 
-            var job = KubernetesYaml.LoadFromString<V1Job>(finalYaml);
+            var job = KubernetesYaml.Deserialize<V1Job>(finalYaml);
             await _client.CreateNamespacedJobAsync(job, NameSpace);
         }
         catch (Exception ex)
