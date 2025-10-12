@@ -4,7 +4,7 @@ public enum LeadListStatus
 {
     Pending,
     Processing,
-    Complete,
+    Completed,
     Failed
     
 }

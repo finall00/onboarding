@@ -11,14 +11,15 @@ public class LeadListService : ILeadListService
     private readonly AppDbContext _context;
     private readonly ILogger<LeadListService> _logger;
     private readonly IRabbitMqPublisher _rabbitMqPublisher;
-    private readonly IKubernetesJobService _kubernetesJobService;
+    private readonly IJobCreator _jobCreator;
 
-    public LeadListService(AppDbContext context, ILogger<LeadListService> logger, IRabbitMqPublisher rabbitMqPublisher, IKubernetesJobService kubernetesJobService)
+    public LeadListService(AppDbContext context, ILogger<LeadListService> logger, IRabbitMqPublisher rabbitMqPublisher,
+        IJobCreator jobCreator)
     {
         _context = context;
         _logger = logger;
         _rabbitMqPublisher = rabbitMqPublisher;
-        _kubernetesJobService = kubernetesJobService;
+        _jobCreator = jobCreator;
     }
 
     public async Task<PagedResult<LeadListResponse>> GetAll(int page, int pageSize, string? status, string? q)
@@ -61,7 +62,6 @@ public class LeadListService : ILeadListService
 
     public async Task<(LeadListResponse? Response, string? ErrorMessage)> Create(LeadListCreateRequest request)
     {
-        
         var leadList = new LeadList
         {
             Id = Guid.NewGuid(),
@@ -73,11 +73,6 @@ public class LeadListService : ILeadListService
             UpdatedAt = DateTime.UtcNow,
         };
 
-        _context.LeadLists.Add(leadList);
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Lead list {LeadListId} created with CorrelationId {CorrelationId}", leadList.Id,
-            leadList.CorrelationId);
-
         var msg = new LeadListCreatedMsg
         {
             LeadListId = leadList.Id,
@@ -85,11 +80,28 @@ public class LeadListService : ILeadListService
             SourceUrl = leadList.SourceUrl,
             CreatedAt = leadList.CreatedAt
         };
-        
-        await _rabbitMqPublisher.PublishLeadListCreated(msg);
-        // await _kubernetesJobService.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
 
-        return (MapToResponse(leadList), null);
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            _context.LeadLists.Add(leadList);
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Lead list {LeadListId} created with CorrelationId {CorrelationId}", leadList.Id,
+                leadList.CorrelationId);
+
+            await _rabbitMqPublisher.PublishLeadListCreated(msg);
+            await _jobCreator.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
+
+            await transaction.CommitAsync();
+            return (MapToResponse(leadList), null);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Failed to create lead list and publish message");
+            return (null, "Failed to save the lead list.");
+        }
     }
 
     public async Task<(LeadListResponse? Response, string? ErrorMessage)> Update(Guid id, LeadListCreateRequest request)
@@ -103,8 +115,9 @@ public class LeadListService : ILeadListService
         }
 
         if (!leadList.IsEditable())
-            return (null, $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
-       
+            return (null,
+                $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
+
         leadList.Name = request.Name.Trim();
         leadList.SourceUrl = request.SourceUrl.Trim();
         leadList.UpdatedAt = DateTime.UtcNow;
@@ -126,12 +139,13 @@ public class LeadListService : ILeadListService
         }
 
         if (!leadList.IsDeletable())
-            return (false, $"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
-        
+            return (false,
+                $"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
+
         _context.LeadLists.Remove(leadList);
         await _context.SaveChangesAsync();
-        _logger.LogInformation("Lead list {LeadListId} deleted",  leadList.Id);
-        
+        _logger.LogInformation("Lead list {LeadListId} deleted", leadList.Id);
+
         return (true, null);
     }
 
@@ -154,15 +168,15 @@ public class LeadListService : ILeadListService
         leadList.ErrorMessage = null;
         leadList.CorrelationId = Guid.NewGuid();
         leadList.UpdatedAt = DateTime.UtcNow;
-        
+
         await _context.SaveChangesAsync();
         _logger.LogInformation("Lead list {LeadListId} marked for reprocessing", leadList.Id);
 
         return (MapToResponse(leadList), null);
     }
 
-    private static LeadListResponse MapToResponse(LeadList leadList) => 
-         new LeadListResponse
+    private static LeadListResponse MapToResponse(LeadList leadList) =>
+        new LeadListResponse
         {
             Id = leadList.Id,
             Name = leadList.Name,

@@ -1,10 +1,11 @@
 using leadListAPI.Infrastructure.Data;
-using leadListAPI.Infrastructure.Kubernetes;
 using leadListAPI.Infrastructure.RabbitMq;
 using leadListAPI.Interfaces;
 using leadListAPI.Services;
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
+using leadListAPI.Infrastructure.WorkerJobCreator.Kubernetes;
+using leadListAPI.Infrastructure.WorkerJobCreator.LocalProcess;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 
@@ -28,7 +29,17 @@ builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionStrin
 builder.Services.AddScoped<ILeadListService, LeadListService>();
 builder.Services.AddScoped<IRabbitMqPublisher, RabbitMqPublisher>();
 
-builder.Services.AddScoped<IKubernetesJobService, KubernetesJobService>();
+//Select Job Runner
+var jobRunner = builder.Configuration.GetValue<string>("JobRunner");
+switch (jobRunner)
+{
+    case "Kubernetes":
+        builder.Services.AddScoped<IJobCreator, KubernetesJobCreator>();
+        break;
+    default:
+        builder.Services.AddScoped<IJobCreator, LocalProcessJobCreator>();
+        break;
+}
 
 // FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
@@ -82,7 +93,7 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-    .WithName("HealthCheck");
-
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow })).WithName("HealthCheck");
+app.MapGet("/ready", () => Results.Ok(new {status = "Ready", timestamp = DateTime.UtcNow })).WithName("Ready");
+app.MapGet("/live", () => Results.Ok(new {status ="Alive", timeStamp = DateTime.UtcNow })).WithName("Live");
 app.Run();

@@ -20,4 +20,5 @@ RUN dotnet publish "./LeadListAPI.csproj" -c $BUILD_CONFIGURATION -o /app/publis
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY ../../K8s/worker/job-template.yaml /app/worker/job-template.yaml
 ENTRYPOINT ["dotnet", "LeadListAPI.dll"]
