@@ -1,9 +1,10 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
 using Worker.Domain.DTOs;
+using Worker.Infrastructure.Data;
 
 namespace Worker.Infrastructure.RabbitMq;
 
@@ -12,155 +13,144 @@ public class RabbitMqConsumer : IRabbitMqConsumer
     private readonly ILogger<RabbitMqConsumer> _logger;
     private readonly RabbitMqSettings _settings;
     private readonly IConnectionFactory _factory;
-    
+
     private IConnection? _connection;
     private IChannel? _channel;
     private bool _disposed;
 
-    public RabbitMqConsumer(IOptions<RabbitMqSettings> settings, ILogger<RabbitMqConsumer> logger, IConnectionFactory factory)
+    public RabbitMqConsumer(IOptions<RabbitMqSettings> settings, ILogger<RabbitMqConsumer> logger,
+        IConnectionFactory factory)
     {
         _settings = settings.Value;
         _logger = logger;
         _factory = factory;
     }
-    
-    public  async Task ConnectAsync(CancellationToken cancellationToken = default)
+
+    public bool IsConnected => _connection?.IsOpen == true && _channel?.IsOpen == true;
+
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             _logger.LogInformation("RabbitMqConsumer connecting...");
-            
+
             _connection = await _factory.CreateConnectionAsync(cancellationToken);
             _channel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
-        
+
             await _channel.BasicQosAsync(
-            prefetchSize:0,
-            prefetchCount: _settings.PrefetchCount,
-            global: false,
-            cancellationToken: cancellationToken);
-            
+                prefetchSize: 0,
+                prefetchCount: _settings.PrefetchCount,
+                global: false,
+                cancellationToken: cancellationToken);
+
             _logger.LogInformation("Connected to RabbitMQ");
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error connecting RabbitMQ");
+            throw;
         }
     }
 
-    public async Task StartConsumingAsync(Func<LeadListCreatedMsg, ulong, Task<bool>> onMessageReceived, CancellationToken cancellationToken = default)
+    public async Task<ConsumedMessageResult> ConsumeMessageAsync(Guid correlationId, TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
         if (!IsConnected)
         {
-            _logger.LogError("RabbitMq cant Connect");
-            throw new InvalidOperationException("RabbitMq cant Connect");
+            throw new InvalidOperationException("Cannot consume message, RabbitMQ is not connected.");
         }
 
-        var consumer = new AsyncEventingBasicConsumer(_channel!);
+        var stop = Stopwatch.StartNew();
+        _logger.LogInformation("Searching for message with CorrelationId {CorrelationId} in queue '{QueueName}'...",
+            correlationId, _settings.QueueName);
 
-        consumer.ReceivedAsync += async (sender, eventArgs) =>
+        while (stop.Elapsed < timeout && !cancellationToken.IsCancellationRequested)
         {
-            if (cancellationToken.IsCancellationRequested)
-                return;
-            
-            var body  = eventArgs.Body.ToArray();
-            var msgJson = Encoding.UTF8.GetString(body);
-            var deliveryTag = eventArgs.DeliveryTag;
-            
-            _logger.LogInformation("Received message {Message} from queue {QueueName}", _settings.QueueName, _settings.Exchange);
+            var result = await _channel?.BasicGetAsync(_settings.QueueName, autoAck: false,
+                cancellationToken: cancellationToken);
 
-            try
+            if (result != null)
             {
-                var opt = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
+                var msg = DeserializeMessage(result.Body.ToArray());
 
-                var msg = JsonSerializer.Deserialize<LeadListCreatedMsg>(msgJson, opt);
-
-                if (msg == null)
+                if (msg?.CorrelationId == correlationId)
                 {
-                    _logger.LogWarning("Invalid message received from queue. Permanently reject");
-                    await NackMsgAsync(deliveryTag, false);
-                    return;
+                    _logger.LogInformation("Found matching message with DeliveryTag {DeliveryTag}.",
+                        result.DeliveryTag);
+                    await AckMsgAsync(result.DeliveryTag);
+                    return new ConsumedMessageResult { Found = true, Message = msg };
                 }
 
-                var ack = await onMessageReceived(msg, deliveryTag);
+                _logger.LogWarning("Found message for another job (CorrelationId: {MsgCorrelationId}). Requeuing it.",
+                    msg?.CorrelationId);
+                await NackMsgAsync(result.DeliveryTag, requeue: true);
+            }
 
-                if (!ack) 
-                    _logger.LogWarning("callback return false. message will not be processed");
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError(ex, "Error deserialize message from {QueueName}. reject permanently",
-                    _settings.QueueName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,"Unexpected exception");
-                await NackMsgAsync(deliveryTag, false);
-            }
-        };
+            await Task.Delay(1000, cancellationToken);
+        }
 
-        await _channel!.BasicConsumeAsync(
-            queue: _settings.QueueName!,
-            autoAck: false,
-            consumer: consumer,
-            cancellationToken: cancellationToken);
-        _logger.LogInformation("Consumer registered");
+        _logger.LogWarning("Timeout reached. Message with CorrelationId {CorrelationId} not found.", correlationId);
+        return new ConsumedMessageResult { Found = false };
     }
 
     public ValueTask AckMsgAsync(ulong deliveryTag)
     {
         if (IsConnected)
             return _channel!.BasicAckAsync(deliveryTag, multiple: false);
-        
-        _logger.LogError("RabbitMqConsumer is not connected");
+
+        _logger.LogError("Cannot ACK message, RabbitMqConsumer is not connected");
         return ValueTask.CompletedTask;
     }
 
     public ValueTask NackMsgAsync(ulong deliveryTag, bool requeue)
     {
         if (IsConnected)
-        {
             return _channel!.BasicNackAsync(deliveryTag, multiple: false, requeue: requeue);
-        }
-        
-        _logger.LogError("RabbitMqConsumer is not connected");
+
+        _logger.LogWarning("Cannot NACK message, RabbitMQConsumer is not connected.");
         return ValueTask.CompletedTask;
     }
-    
-    public void Dispose()
+
+    public async ValueTask DisposeAsync()
     {
-        if (_disposed)
-            return;
-        
-        _logger.LogInformation("Cleaning RabbitMq resources");
-        
+        if (_disposed) return;
+        _disposed = true;
+
+        _logger.LogInformation("Disposing RabbitMQ resources asynchronously...");
+
         try
         {
-            if (_channel?.IsOpen == true)
-            {
-                _channel.CloseAsync().GetAwaiter().GetResult();
-                _logger.LogInformation("channel closed");
-            }
-
-            if (_connection?.IsOpen == true)
-            {
-                _connection.CloseAsync().GetAwaiter().GetResult();
-                _logger.LogInformation("connection closed");
-            }
+            // Agora usamos 'await' corretamente em um método 'async'.
+            if (_channel is { IsOpen: true }) await _channel.CloseAsync();
+            if (_connection is { IsOpen: true }) await _connection.CloseAsync();
 
             _channel?.Dispose();
             _connection?.Dispose();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error closing RabbitMq");
+            _logger.LogWarning(ex, "An error occurred during RabbitMQ resource disposal.");
         }
-
-        _disposed = true;
+    }
+    
+    public void Dispose()
+    {
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
         GC.SuppressFinalize(this);
     }
 
-    public bool IsConnected => _connection?.IsOpen == true &&  _channel?.IsOpen == true;
+    private LeadListCreatedMsg? DeserializeMessage(byte[] body)
+    {
+        try
+        {
+            var msgJson = Encoding.UTF8.GetString(body);
+            return JsonSerializer.Deserialize<LeadListCreatedMsg>(msgJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize message. It might be a poison message.");
+            return null;
+        }
+    }
 }

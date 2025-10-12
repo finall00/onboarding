@@ -18,7 +18,6 @@ public class Worker : BackgroundService
 
     private readonly TaskCompletionSource _messageProcessedT = new();
 
-
     public Worker(
         ILogger<Worker> logger,
         IServiceScopeFactory scopeFactory,
@@ -30,7 +29,6 @@ public class Worker : BackgroundService
         _hostLifetime = hostLifetime;
         _rabbitMqConsumer = rabbitMqConsumer;
 
-        // LER DAS VARIÁVEIS DE AMBIENTE
         var leadListIdStr = Environment.GetEnvironmentVariable("LEADLIST_ID");
         var correlationIdStr = Environment.GetEnvironmentVariable("CORRELATION_ID");
 
@@ -45,11 +43,6 @@ public class Worker : BackgroundService
             _logger.LogError("CORRELATION_ID environment variable is invalid or not set");
             _targetCorrelationId = Guid.Empty;
         }
-
-        _logger.LogInformation(
-            "Worker configured - LeadListId: {LeadListId}, CorrelationId: {CorrelationId}",
-            _targetLeadListId,
-            _targetCorrelationId);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -61,36 +54,36 @@ public class Worker : BackgroundService
             return;
         }
 
-        _logger.LogInformation(
-            "Worker started LeadListId: {LeadListId}, CorrelationId: {CorrelationId}",
-            _targetLeadListId,
-            _targetCorrelationId);
+        _logger.LogInformation("Worker started LeadListId: {LeadListId}, CorrelationId: {CorrelationId}",
+            _targetLeadListId, _targetCorrelationId);
 
         try
         {
             await _rabbitMqConsumer.ConnectAsync(stoppingToken);
-            await _rabbitMqConsumer.StartConsumingAsync(OnMessageReceivedAsync, stoppingToken);
 
-            _logger.LogInformation("Consumer ready. Waiting for messages for {timeoutSeconds}", MessageTimeoutSeconds);
-            await _messageProcessedT.Task.WaitAsync(TimeSpan.FromSeconds(MessageTimeoutSeconds), stoppingToken);
-        }
-        catch (TimeoutException ex)
-        {
-            var err = $"Timeout no message in {MessageTimeoutSeconds} seconds ";
-            _logger.LogError(err, ex.Message);
-            
-            await UpdateStatusAsync(
-                ll => ll.Status = LeadListStatus.Failed);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Worker is being cancelled. Shutdown gracefully");
+            await UpdateLeadListStatusAsync(ll => ll.Status = LeadListStatus.Processing);
+
+            var consumeResult = await _rabbitMqConsumer.ConsumeMessageAsync(
+                _targetCorrelationId,
+                TimeSpan.FromSeconds(MessageTimeoutSeconds),
+                stoppingToken);
+
+            if (!consumeResult.Found)
+                throw new TimeoutException(
+                    $"Message with CorrelationId {_targetCorrelationId} not found in queue within {MessageTimeoutSeconds} seconds.");
+
+            await ProcessLeadListAsync(consumeResult.Message!);
+            _logger.LogInformation("Successfully processed message with CorrelationId {CorrelationId}", _targetCorrelationId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Fatal error in worker");
-            await UpdateStatusAsync(
-                ll => ll.Status = LeadListStatus.Failed);
+            _logger.LogError(ex, "An error occurred during job execution. Marking LeadList as Failed.");
+
+            await UpdateLeadListStatusAsync(ll =>
+            {
+                ll.Status = LeadListStatus.Failed;
+                ll.ErrorMessage = ex.Message;
+            });
         }
         finally
         {
@@ -100,56 +93,10 @@ public class Worker : BackgroundService
         }
     }
 
-    private async Task<bool> OnMessageReceivedAsync(LeadListCreatedMsg message, ulong deliveryTag)
-    {
-        if (_messageProcessedT.Task.IsCompleted)
-        {
-            _logger.LogDebug("Message already processed. Ignoring.");
-            await _rabbitMqConsumer.NackMsgAsync(deliveryTag, requeue: true);
-            return false;
-        }
-
-        if (message.CorrelationId != _targetCorrelationId)
-        {
-            _logger.LogWarning(
-                "CorrelationId mismatch. Expected: {Expected}, Received: {Received}. Requeuing.",
-                _targetCorrelationId,
-                message.CorrelationId);
-
-            await _rabbitMqConsumer.NackMsgAsync(deliveryTag, requeue: true);
-            return false;
-        }
-
-        _logger.LogInformation("Correct message received. Starting processing...");
-
-        try
-        {
-            await UpdateStatusAsync(ll => ll.Status = LeadListStatus.Processing);
-            
-            await ProcessLeadListAsync(message);
-            await _rabbitMqConsumer.AckMsgAsync(deliveryTag);
-            _messageProcessedT.TrySetResult();
-            
-            _logger.LogInformation("Processing completed successfully");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing message");
-
-            await UpdateStatusAsync(
-                ll => ll.Status = LeadListStatus.Failed);
-
-            await _rabbitMqConsumer.NackMsgAsync(deliveryTag, requeue: false);
-            _messageProcessedT.TrySetException(ex);
-            return false;
-        }
-    }
-
     private async Task ProcessLeadListAsync(LeadListCreatedMsg message)
     {
         var random = new Random();
-        
+
         var delaySeconds = random.Next(2, 6);
         _logger.LogInformation("Simulating processing for LeadList ID : {LeadList_ID} delay: {DelaySeconds}",
             delaySeconds, message.LeadListId);
@@ -158,13 +105,13 @@ public class Worker : BackgroundService
         if (random.Next(1, 101) <= 20)
         {
             _logger.LogWarning("Simulating failure");
-            throw new Exception("failure");
+            throw new InvalidOperationException("failure");
         }
 
         var processedCount = random.Next(10, 501);
         _logger.LogInformation("Processed {ProcessedCount} leads", processedCount);
 
-        await UpdateStatusAsync(ll =>
+        await UpdateLeadListStatusAsync(ll =>
         {
             ll.Status = LeadListStatus.Completed;
             ll.ProcessedCount = processedCount;
@@ -175,9 +122,9 @@ public class Worker : BackgroundService
             delaySeconds);
     }
 
-    private async Task UpdateStatusAsync(
+    private async Task UpdateLeadListStatusAsync(
         Action<LeadList> updateAction
-      )
+    )
     {
         try
         {
