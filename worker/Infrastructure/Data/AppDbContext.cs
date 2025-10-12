@@ -3,18 +3,13 @@ using Worker.Domain.Models;
 
 namespace Worker.Infrastructure.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-    {
-    }
-
     public DbSet<LeadList> LeadLists { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
         modelBuilder.Entity<LeadList>().ToTable("lead_lists");
 
         modelBuilder.Entity<LeadList>(entity =>

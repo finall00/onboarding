@@ -9,11 +9,9 @@ namespace Worker.Infrastructure.RabbitMq;
 
 public class RabbitMqConsumer : IRabbitMqConsumer
 {
-
     private readonly ILogger<RabbitMqConsumer> _logger;
     private readonly RabbitMqSettings _settings;
     private readonly IConnectionFactory _factory;
-    
     
     private IConnection? _connection;
     private IChannel? _channel;
@@ -26,48 +24,21 @@ public class RabbitMqConsumer : IRabbitMqConsumer
         _factory = factory;
     }
     
-    public  async Task Connect(CancellationToken cancellationToken = default)
+    public  async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             _logger.LogInformation("RabbitMqConsumer connecting...");
-
+            
             _connection = await _factory.CreateConnectionAsync(cancellationToken);
             _channel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
-
-            await _channel.ExchangeDeclareAsync(
-                exchange: _settings.Exchange,
-                type: ExchangeType.Topic,
-                durable: true,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: cancellationToken);
-            
-            await _channel.QueueDeclareAsync(
-                queue: _settings.QueueName,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: cancellationToken);
-            
-            _logger.LogInformation("Declared Queue {QueueName}", _settings.QueueName);
-            
-            await _channel.QueueBindAsync(
-                queue: _settings.QueueName,
-                exchange: _settings.Exchange,
-                routingKey: _settings.RoutingKey,
-                arguments: null,
-                cancellationToken: cancellationToken);
-            
-            _logger.LogInformation("Binding  Queue '{QueueName}' to '{Exchange}' ", _settings.QueueName, _settings.Exchange);
-
+        
             await _channel.BasicQosAsync(
             prefetchSize:0,
             prefetchCount: _settings.PrefetchCount,
             global: false,
-            cancellationToken: cancellationToken
-                );
+            cancellationToken: cancellationToken);
+            
             _logger.LogInformation("Connected to RabbitMQ");
         }
         catch (Exception e)
@@ -76,9 +47,9 @@ public class RabbitMqConsumer : IRabbitMqConsumer
         }
     }
 
-    public async Task StartConsuming(Func<LeadListCreatedMsg, ulong, Task<bool>> onMessageReceived, CancellationToken cancellationToken = default)
+    public async Task StartConsumingAsync(Func<LeadListCreatedMsg, ulong, Task<bool>> onMessageReceived, CancellationToken cancellationToken = default)
     {
-        if (IsConnected)
+        if (!IsConnected)
         {
             _logger.LogError("RabbitMq cant Connect");
             throw new InvalidOperationException("RabbitMq cant Connect");
@@ -109,51 +80,45 @@ public class RabbitMqConsumer : IRabbitMqConsumer
                 if (msg == null)
                 {
                     _logger.LogWarning("Invalid message received from queue. Permanently reject");
-                    await NackMsg(deliveryTag, false);
+                    await NackMsgAsync(deliveryTag, false);
                     return;
                 }
 
                 var ack = await onMessageReceived(msg, deliveryTag);
 
-                if (!ack)
-                {
+                if (!ack) 
                     _logger.LogWarning("callback return false. message will not be processed");
-                }
-
             }
             catch (JsonException ex)
             {
                 _logger.LogError(ex, "Error deserialize message from {QueueName}. reject permanently",
                     _settings.QueueName);
-
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,"Unexpected exception");
-                await NackMsg(deliveryTag, false);
+                await NackMsgAsync(deliveryTag, false);
             }
         };
 
         await _channel!.BasicConsumeAsync(
-            queue: _settings.QueueName,
+            queue: _settings.QueueName!,
             autoAck: false,
             consumer: consumer,
             cancellationToken: cancellationToken);
         _logger.LogInformation("Consumer registered");
     }
 
-    public ValueTask AckMsg(ulong deliveryTag, bool requeue)
+    public ValueTask AckMsgAsync(ulong deliveryTag)
     {
         if (IsConnected)
-        {
-            return _channel!.BasicNackAsync(deliveryTag, multiple: false, requeue: requeue);
-        }
+            return _channel!.BasicAckAsync(deliveryTag, multiple: false);
         
         _logger.LogError("RabbitMqConsumer is not connected");
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask NackMsg(ulong deliveryTag, bool requeue)
+    public ValueTask NackMsgAsync(ulong deliveryTag, bool requeue)
     {
         if (IsConnected)
         {
