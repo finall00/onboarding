@@ -32,7 +32,7 @@ public class KubernetesJobCreator : IJobCreator
             _logger.LogInformation("Load from kubeconfig local");
         }
         
-        var path = Path.Combine(AppContext.BaseDirectory, "worker", "job-template.yaml");
+        var path = Path.Combine(AppContext.BaseDirectory, "templates", "job-template.yaml");
         if (!File.Exists(path))
             throw new FileNotFoundException($"Worker Job template not found at {path}");
 
