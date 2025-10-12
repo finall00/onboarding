@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccountName: api-sa
+      initContainers:
+        - name: migrate-db
+          image: finall00/leadlist-api:latest
+          command: ["dotnet", "ef", "database", "update"]
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              value: "Host=postgres.dev;Database=leadlists;Username=postgres;Password=$(POSTGRES_PASSWORD)"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+
+      containers:
+        - name: api
+          image: finall00/leadlist-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production" 
+            - name: JobRunner
+              value: "Kubernetes"
+            - name: ConnectionStrings__DefaultConnection
+              value: "Host=postgres.dev.svc.cluster.local;Database=leadlists;Username=postgres;Password=$(POSTGRES_PASSWORD)"
+            - name: RabbitMq__Host
+              value: "rabbitmq.dev.svc.cluster.local"
+            - name: RabbitMq__Username
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RabbitMq__Password
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: RABBITMQ_DEFAULT_PASS
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20

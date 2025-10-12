@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: worker-job-{{leadListId}}
+  namespace: dev
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: worker
+          image: finall00/leadlist-worker:latest
+          env:
+            - name: LEADLIST_ID
+              value: "{{leadListId}}"
+            - name: CORRELATION_ID
+              value: "{{correlationId}}"
+            - name: ConnectionStrings__DefaultConnection
+              value: "Host=postgres.dev.svc.cluster.local;Port=5432;Database=leadlists;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)"
+            - name: RabbitMq__Host
+              value: "rabbitmq.dev.svc.cluster.local"
+            - name: RabbitMq__Username
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: RABBITMQ_DEFAULT_USER
+            - name: RabbitMq__Password
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: RABBITMQ_DEFAULT_PASS
+
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
