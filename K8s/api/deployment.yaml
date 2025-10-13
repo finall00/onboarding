@@ -44,8 +44,6 @@ spec:
                secretKeyRef:
                  name: postgres-secret
                  key: CONNECTION_STRING
-                
- 
             - name: RabbitMq__Host
               value: "rabbitmq.dev.svc.cluster.local"
             - name: RabbitMq__Username
