@@ -4,6 +4,7 @@ using leadListAPI.Interfaces;
 using leadListAPI.Services;
 using Microsoft.EntityFrameworkCore;
 using FluentValidation;
+using leadListAPI.Infrastructure.WorkerJobCreator.Docker;
 using leadListAPI.Infrastructure.WorkerJobCreator.Kubernetes;
 using leadListAPI.Infrastructure.WorkerJobCreator.LocalProcess;
 using Microsoft.Extensions.Options;
@@ -15,12 +16,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-
-// TODO: Add RabbitMQ
-// TODO: Add Kubernetes
-// TODO: valid All inputs with  validator
-// TODO: Create a worker for consume the queue
-
 // Postgres
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -31,10 +26,13 @@ builder.Services.AddScoped<IRabbitMqPublisher, RabbitMqPublisher>();
 
 //Select Job Runner
 var jobRunner = builder.Configuration.GetValue<string>("JobRunner");
-switch (jobRunner)
+switch (jobRunner?.ToLower())
 {
-    case "Kubernetes":
+    case "kubernetes":
         builder.Services.AddScoped<IJobCreator, KubernetesJobCreator>();
+        break;
+    case "docker":
+        builder.Services.AddScoped<IJobCreator, DockerJobCreator>();
         break;
     default:
         builder.Services.AddScoped<IJobCreator, LocalProcessJobCreator>();
@@ -46,7 +44,6 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 //RabbitMQ load settings
 builder.Services.Configure<RabbitMqSettings>(builder.Configuration.GetSection("RabbitMq"));
-
 
 // RabbitMQ
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
@@ -64,20 +61,25 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 });
 
 // CORS config
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
+
+Console.WriteLine(allowedOrigins);
+
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+      
+            policy.WithOrigins("http://localhost:5173")
+                .AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
     });
 });
 
 var app = builder.Build();
 
-var config = app.Services.GetRequiredService<IConfiguration>();
-
+// TODO: remove true
 if (app.Environment.IsDevelopment() || true)
 {
     app.UseSwagger();
@@ -94,6 +96,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow })).WithName("HealthCheck");
-app.MapGet("/ready", () => Results.Ok(new {status = "Ready", timestamp = DateTime.UtcNow })).WithName("Ready");
-app.MapGet("/live", () => Results.Ok(new {status ="Alive", timeStamp = DateTime.UtcNow })).WithName("Live");
 app.Run();

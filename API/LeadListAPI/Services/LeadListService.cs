@@ -90,9 +90,7 @@ public class LeadListService : ILeadListService
             _logger.LogInformation("Lead list {LeadListId} created with CorrelationId {CorrelationId}", leadList.Id,
                 leadList.CorrelationId);
 
-            await _rabbitMqPublisher.PublishLeadListCreated(msg);
-            await _jobCreator.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
-
+            await SendMessageAsync(leadList, msg);
             await transaction.CommitAsync();
             return (MapToResponse(leadList), null);
         }
@@ -149,7 +147,6 @@ public class LeadListService : ILeadListService
         return (true, null);
     }
 
-    //TODO: Implement the rabbitMq publisher
     public async Task<(LeadListResponse? Response, string? ErrorMessage)> Reprocess(Guid id)
     {
         var leadList = await _context.LeadLists.FindAsync(id);
@@ -161,22 +158,49 @@ public class LeadListService : ILeadListService
 
         if (leadList.Status != LeadListStatus.Failed)
             return (null,
-                $"Cannot reprocess leadlist with status {leadList.Status}. Only Failed list can be reprocessed. ");
+                $"Cannot reprocess lead list with status {leadList.Status}. Only Failed list can be reprocessed. ");
 
         leadList.Status = LeadListStatus.Pending;
         leadList.ProcessedCount = 0;
         leadList.ErrorMessage = null;
         leadList.CorrelationId = Guid.NewGuid();
         leadList.UpdatedAt = DateTime.UtcNow;
+        
+        var msg = new LeadListCreatedMsg
+        {
+            LeadListId = leadList.Id,
+            CorrelationId = leadList.CorrelationId,
+            SourceUrl = leadList.SourceUrl,
+            CreatedAt = leadList.CreatedAt
+        };
 
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Lead list {LeadListId} marked for reprocessing", leadList.Id);
+        await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        return (MapToResponse(leadList), null);
+        try
+        {
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Lead list {LeadListId} marked for reprocessing", leadList.Id);
+
+            await SendMessageAsync(leadList, msg);
+            await transaction.CommitAsync();
+            return (MapToResponse(leadList), null);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Failed to put reprocess lead list and publish message");
+            return (null, "Failed to save the lead list.");
+        }
     }
-
+    
+    private async Task SendMessageAsync(LeadList leadList, LeadListCreatedMsg msg)
+    {
+        await _rabbitMqPublisher.PublishLeadListCreated(msg);
+        await _jobCreator.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
+    }
+    
     private static LeadListResponse MapToResponse(LeadList leadList) =>
-        new LeadListResponse
+        new()
         {
             Id = leadList.Id,
             Name = leadList.Name,
