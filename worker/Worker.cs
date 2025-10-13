@@ -11,7 +11,8 @@ public class Worker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHostApplicationLifetime _hostLifetime;
     private readonly IRabbitMqConsumer _rabbitMqConsumer;
-
+    private readonly IRabbitMqPublisher _rabbitMqPublisher;
+    
     private readonly Guid _targetLeadListId;
     private readonly Guid _targetCorrelationId;
     private const int MessageTimeoutSeconds = 30;
@@ -22,12 +23,14 @@ public class Worker : BackgroundService
         ILogger<Worker> logger,
         IServiceScopeFactory scopeFactory,
         IHostApplicationLifetime hostLifetime,
+        IRabbitMqPublisher rabbitMqPublisher,
         IRabbitMqConsumer rabbitMqConsumer)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _hostLifetime = hostLifetime;
         _rabbitMqConsumer = rabbitMqConsumer;
+        _rabbitMqPublisher = rabbitMqPublisher;
 
         var leadListIdStr = Environment.GetEnvironmentVariable("LEADLIST_ID");
         var correlationIdStr = Environment.GetEnvironmentVariable("CORRELATION_ID");
