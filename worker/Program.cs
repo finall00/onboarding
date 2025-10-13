@@ -10,7 +10,6 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-//RabbitMQ load settings
 builder.Services.Configure<RabbitMqSettings>(builder.Configuration.GetSection("RabbitMq"));
 
 builder.Services.AddSingleton<IConnectionFactory>(sp =>

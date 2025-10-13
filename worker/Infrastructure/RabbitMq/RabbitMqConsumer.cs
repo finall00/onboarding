@@ -66,8 +66,7 @@ public class RabbitMqConsumer : IRabbitMqConsumer
 
         while (stop.Elapsed < timeout && !cancellationToken.IsCancellationRequested)
         {
-            var result = await _channel?.BasicGetAsync(_settings.QueueName, autoAck: false,
-                cancellationToken: cancellationToken);
+            var result = await _channel?.BasicGetAsync(_settings.QueueName, autoAck: false, cancellationToken: cancellationToken);
 
             if (result != null)
             {
@@ -81,9 +80,13 @@ public class RabbitMqConsumer : IRabbitMqConsumer
                     return new ConsumedMessageResult { Found = true, Message = msg };
                 }
 
-                _logger.LogWarning("Found message for another job (CorrelationId: {MsgCorrelationId}). Requeuing it.",
-                    msg?.CorrelationId);
+                _logger.LogWarning("Found message for another job (CorrelationId: {MsgCorrelationId}). Requeuing it.", msg?.CorrelationId);
                 await NackMsgAsync(result.DeliveryTag, requeue: true);
+
+                var delay = Random.Shared.Next(500, 2501);
+                await Task.Delay(delay, cancellationToken);
+                
+                continue;
             }
 
             await Task.Delay(1000, cancellationToken);
@@ -120,7 +123,6 @@ public class RabbitMqConsumer : IRabbitMqConsumer
 
         try
         {
-            // Agora usamos 'await' corretamente em um método 'async'.
             if (_channel is { IsOpen: true }) await _channel.CloseAsync();
             if (_connection is { IsOpen: true }) await _connection.CloseAsync();
 

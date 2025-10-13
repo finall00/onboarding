@@ -54,8 +54,7 @@ public class Worker : BackgroundService
             return;
         }
 
-        _logger.LogInformation("Worker started LeadListId: {LeadListId}, CorrelationId: {CorrelationId}",
-            _targetLeadListId, _targetCorrelationId);
+        _logger.LogInformation("Worker started LeadListId: {LeadListId}, CorrelationId: {CorrelationId}", _targetLeadListId, _targetCorrelationId);
 
         try
         {
