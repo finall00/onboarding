@@ -2,7 +2,8 @@ name: Build and Push API and Worker to Docker Hub
 
 on:
   push:
-    branches: ["main"]
+    tags:
+      - 'v*.*.*'
 
 jobs:
   build-and-push:
@@ -22,17 +23,28 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Copie job-template to API context
-        run: cp ./K8s/worker/job-template.yaml ./API/LeadListAPI/job-template.yaml
+        run: cp ./K8s/worker/job-template.yaml ./API/job-template.yaml
+
+      - name: Extract metadata (tags, labels) for API
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: finall00/leadlist-api
 
       - name: Build and push API image
         uses: docker/build-push-action@v5
         with:
-          context: ./API/LeadListAPI
-          file: ./API/LeadListAPI/Dockerfile
+          context: ./API/
+          file: ./API/Dockerfile
           push: true
-          tags: |
-            finall00/leadlist-api:latest
-            finall00/leadlist-api:${{ github.sha }}
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels}}
+
+      - name: Extract metadata (tags, labels) for worker Docker
+        id: meta-worker
+        uses: docker/metadata-action@v5
+        with:
+          images: finall00/leadlist-worker
 
       - name: Build and push Worker image
         uses: docker/build-push-action@v5
@@ -40,6 +52,5 @@ jobs:
           context: ./worker
           file: ./worker/Dockerfile
           push: true
-          tags: |
-            finall00/leadlist-worker:latest
-            finall00/leadlist-worker:${{ github.sha }}
+          tags: ${{ steps.meta-worker.outputs.tags}}
+          labels: ${{ steps.meta-worker.outputs.labels }}

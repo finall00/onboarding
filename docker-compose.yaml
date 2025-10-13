@@ -14,6 +14,7 @@ services:
       RabbitMq__Password: "${RABBITMQ_PASS}"
       ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT}"
       ASPNETCORE_URLS: "http://+:8080"
+      JobRunner: "Docker"
     depends_on:
       postgres:
         condition: service_healthy
