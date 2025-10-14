@@ -43,8 +43,7 @@ function App() {
   const [totalCount, setTotalCount] = useState<number | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(0);
-  // Default page size: prefer VITE_PAGE_SIZE, fallback to VITE_DEFAULT_PAGE_SIZE
-  const defaultPageSize = Number(import.meta.env.VITE_PAGE_SIZE ?? import.meta.env.VITE_DEFAULT_PAGE_SIZE ?? 10) || 10;
+  const defaultPageSize = Number(import.meta.env.VITE_PAGE_SIZE ?? 10) || 10;
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,8 +55,7 @@ function App() {
     null
   );
 
-  // Polling interval (ms) can be configured via .env. Prefer VITE_POLL_MS with fallback
-  const envPoll = Number(import.meta.env.VITE_POLL_MS ?? import.meta.env.VITE_POLL_INTERVAL_MS ?? NaN);
+  const envPoll = Number(import.meta.env.VITE_POLL_MS ?? NaN);
   const poolingIntervalMs = Number.isFinite(envPoll) && envPoll > 0 ? envPoll : 60000;
 
   const [isDeleting, setIsDeleting] = useState(false);
@@ -78,7 +76,7 @@ function App() {
       setLeadLists(res.items);
       setTotalCount(res.total);
     } catch (error) {
-      console.error("Failed to fetch lead lists:", error);
+      console.error(error);
       showToast("Failed to load lead lists", "error");
     } finally {
       setIsLoading(false);
@@ -307,7 +305,7 @@ function App() {
                 <TableRow key={leadList.id} hover onClick={() => openDetailsDialog(leadList)} sx={{ cursor: 'pointer' }}>
                   <TableCell>
                     <Typography variant="body2" fontWeight="medium">
-                      {leadList.name}
+                      {leadList.name.slice(0, 50)}{leadList.name.length > 50 ? "…" : ""}
                     </Typography>
                   </TableCell>
                   <TableCell>

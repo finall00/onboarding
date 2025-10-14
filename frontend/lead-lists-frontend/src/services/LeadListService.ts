@@ -26,14 +26,13 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
     return {
       id: String(a.id),
       name: String(a.name ?? ""),
-      sourceUrl: String(a.sourceUrl ?? a.source_url ?? ""),
+      sourceUrl: String(a.sourceUrl ?? ""),
       status: (a.status as LeadList["status"]) || "Pending",
-      processedCount: Number(a.processedCount ?? a.processed_count ?? 0),
-      errorMessage:
-        a.errorMessage ?? a.error_message ? String(a.errorMessage ?? a.error_message) : null,
-      createdAt: String(a.createdAt ?? a.created_at ?? new Date().toISOString()),
-      updatedAt: String(a.updatedAt ?? a.updated_at ?? new Date().toISOString()),
-      correlationId: String(a.correlationId ?? a.correlation_id ?? ""),
+      processedCount: Number(a.processedCount ?? 0),
+      errorMessage: a.errorMessage === undefined || a.errorMessage === null ? null : String(a.errorMessage),
+      createdAt: String(a.createdAt ?? new Date().toISOString()),
+      updatedAt: String(a.updatedAt ?? new Date().toISOString()),
+      correlationId: String(a.correlationId ?? ""),
     } as LeadList;
   }
 
@@ -97,7 +96,7 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
       const res = await fetch(`${BASE}/lead-lists`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Name: request.name, SourceUrl: request.sourceUrl }),
+        body: JSON.stringify({ name: request.name, sourceUrl: request.sourceUrl }),
       });
       if (!res.ok) {
         const contentType = res.headers.get("content-type") || "";
@@ -106,7 +105,6 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
           if (contentType.includes("application/json")) body = await res.json();
           else body = await res.text();
         } catch (parseErr) {
-          // ignore parse error, we'll attach undefined body
           console.warn("Failed to parse error body", parseErr);
         }
         throw new HttpError(`Failed to create lead list: ${res.status}`, res.status, body);
@@ -117,11 +115,12 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
     },
 
     async update(id: string, request: UpdateLeadListRequest) {
-      const params = new URLSearchParams();
-      if (typeof request.name === "string") params.set("Name", request.name);
-      if (typeof request.sourceUrl === "string") params.set("SourceUrl", request.sourceUrl);
-      const url = `${BASE}/lead-lists/${id}${params.toString() ? `?${params.toString()}` : ""}`;
-      const res = await fetch(url, { method: "PUT" });
+      const url = `${BASE}/lead-lists/${id}`;
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: request.name, sourceUrl: request.sourceUrl }),
+      });
       if (!res.ok) {
         const contentType = res.headers.get("content-type") || "";
         let body: unknown = undefined;
