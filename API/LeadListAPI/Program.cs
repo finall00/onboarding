@@ -18,7 +18,6 @@ builder.Services.AddSwaggerGen();
 
 // Postgres
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<ILeadListService, LeadListService>();
@@ -30,9 +29,6 @@ switch (jobRunner?.ToLower())
 {
     case "kubernetes":
         builder.Services.AddScoped<IJobCreator, KubernetesJobCreator>();
-        break;
-    case "docker":
-        builder.Services.AddScoped<IJobCreator, DockerJobCreator>();
         break;
     default:
         builder.Services.AddScoped<IJobCreator, LocalProcessJobCreator>();
@@ -70,10 +66,10 @@ builder.Services.AddCors(opt =>
     opt.AddPolicy("AllowFrontend", policy =>
     {
       
-            policy.WithOrigins("http://localhost:5173")
-                .AllowAnyOrigin()
+            policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
                 .AllowAnyHeader()
-                .AllowAnyMethod();
+                .AllowAnyMethod()
+                .AllowCredentials();
     });
 });
 

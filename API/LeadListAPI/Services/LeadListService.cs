@@ -10,15 +10,15 @@ public class LeadListService : ILeadListService
 {
     private readonly AppDbContext _context;
     private readonly ILogger<LeadListService> _logger;
-    private readonly IRabbitMqPublisher _rabbitMqPublisher;
     private readonly IJobCreator _jobCreator;
 
-    public LeadListService(AppDbContext context, ILogger<LeadListService> logger, IRabbitMqPublisher rabbitMqPublisher,
+    public LeadListService(
+        AppDbContext context, 
+        ILogger<LeadListService> logger, 
         IJobCreator jobCreator)
     {
         _context = context;
         _logger = logger;
-        _rabbitMqPublisher = rabbitMqPublisher;
         _jobCreator = jobCreator;
     }
 
@@ -90,7 +90,7 @@ public class LeadListService : ILeadListService
             _logger.LogInformation("Lead list {LeadListId} created with CorrelationId {CorrelationId}", leadList.Id,
                 leadList.CorrelationId);
 
-            await SendMessageAsync(leadList, msg);
+            await CreateJobAsync(leadList, msg);
             await transaction.CommitAsync();
             return (MapToResponse(leadList), null);
         }
@@ -113,8 +113,7 @@ public class LeadListService : ILeadListService
         }
 
         if (!leadList.IsEditable())
-            return (null,
-                $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
+            return (null, $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
 
         leadList.Name = request.Name.Trim();
         leadList.SourceUrl = request.SourceUrl.Trim();
@@ -129,7 +128,7 @@ public class LeadListService : ILeadListService
 
     public async Task<(bool Success, string? ErrorMessage)> Delete(Guid id)
     {
-        var leadList = _context.LeadLists.Find(id);
+        var leadList = await _context.LeadLists.FindAsync(id);
         if (leadList == null)
         {
             _logger.LogError("Lead list with id {id} was not found", id);
@@ -137,8 +136,7 @@ public class LeadListService : ILeadListService
         }
 
         if (!leadList.IsDeletable())
-            return (false,
-                $"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
+            return (false, $"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
 
         _context.LeadLists.Remove(leadList);
         await _context.SaveChangesAsync();
@@ -157,8 +155,7 @@ public class LeadListService : ILeadListService
         }
 
         if (leadList.Status != LeadListStatus.Failed)
-            return (null,
-                $"Cannot reprocess lead list with status {leadList.Status}. Only Failed list can be reprocessed. ");
+            return (null, $"Cannot reprocess lead list with status {leadList.Status}. Only Failed list can be reprocessed. ");
 
         leadList.Status = LeadListStatus.Pending;
         leadList.ProcessedCount = 0;
@@ -181,7 +178,7 @@ public class LeadListService : ILeadListService
             await _context.SaveChangesAsync();
             _logger.LogInformation("Lead list {LeadListId} marked for reprocessing", leadList.Id);
 
-            await SendMessageAsync(leadList, msg);
+            await CreateJobAsync(leadList, msg);
             await transaction.CommitAsync();
             return (MapToResponse(leadList), null);
         }
@@ -193,9 +190,9 @@ public class LeadListService : ILeadListService
         }
     }
     
-    private async Task SendMessageAsync(LeadList leadList, LeadListCreatedMsg msg)
+    private async Task CreateJobAsync(LeadList leadList, LeadListCreatedMsg msg)
     {
-        await _rabbitMqPublisher.PublishLeadListCreated(msg);
+        // await _rabbitMqPublisher.PublishLeadListCreated(msg);
         await _jobCreator.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
     }
     
