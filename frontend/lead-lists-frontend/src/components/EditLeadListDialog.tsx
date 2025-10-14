@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Dialog, DialogTitle, DialogContent } from "@mui/material";
-import type { LeadList } from "../lib/leadlist";
+import type { LeadList } from "../model/leadlist";
 import LeadListForm from "./LeadListForm";
 
 interface EditLeadListDialogProps {
@@ -19,16 +19,14 @@ export function EditLeadListDialog({ isOpen, onClose, onSubmit, leadList }: Edit
       await onSubmit(values);
       onClose();
     } catch (error) {
-      const e = error as unknown;
-      if (e && typeof e === "object" && "body" in (e as Record<string, unknown>)) {
-        const body = (e as Record<string, unknown>).body as Record<string, unknown> | undefined;
-        const apiErrors = body?.errors as Record<string, string[] | undefined> | undefined;
-        if (apiErrors) {
-          const mapped: Record<string, string> = {};
-          if (Array.isArray(apiErrors.Name) && apiErrors.Name.length) mapped.name = apiErrors.Name.join(" ");
-          if (Array.isArray(apiErrors.SourceUrl) && apiErrors.SourceUrl.length) mapped.sourceUrl = apiErrors.SourceUrl.join(" ");
-          throw { apiErrors: mapped };
-        }
+      const apiErrors = (error as any)?.body?.errors;
+      if (apiErrors) {
+        throw {
+          apiErrors: {
+            name: (apiErrors.name || apiErrors.Name || []).join(" "),
+            sourceUrl: (apiErrors.sourceUrl || apiErrors.SourceUrl || []).join(" ")
+          }
+        };
       }
       throw error;
     } finally {

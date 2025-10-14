@@ -29,7 +29,7 @@ import {
   Refresh as RefreshIcon,
   Replay as ReplayIcon,
 } from "@mui/icons-material";
-import type { LeadList } from "./lib/leadlist";
+import type { LeadList } from "./model/leadlist";
 import { leadListService, leadListCache } from "./services/LeadListService";
 import { StatusBadge } from "./components/StatusBadge";
 import { CreateLeadListDialog } from "./components/CreateLeadListDialog";

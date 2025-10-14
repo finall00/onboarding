@@ -1,5 +1,5 @@
 import { Chip, type ChipProps } from "@mui/material";
-import type { LeadListStatus } from "../lib/leadlist";
+import type { LeadListStatus } from "../model/leadlist";
 
 interface StatusBadgeProps {
   status: LeadListStatus;

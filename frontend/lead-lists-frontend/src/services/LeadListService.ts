@@ -2,7 +2,7 @@ import type {
   LeadList,
   CreateLeadListRequest,
   UpdateLeadListRequest,
-} from "../lib/leadlist";
+} from "../model/leadlist";
 
 const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_BASE as string) || "http://localhost:8080";
 
@@ -21,19 +21,13 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
     _forceReloadToken += 1;
   }
 
-  function mapApiToLeadList(api: unknown): LeadList {
-    const a = api as Record<string, unknown>;
-    return {
-      id: String(a.id),
-      name: String(a.name ?? ""),
-      sourceUrl: String(a.sourceUrl ?? ""),
-      status: (a.status as LeadList["status"]) || "Pending",
-      processedCount: Number(a.processedCount ?? 0),
-      errorMessage: a.errorMessage === undefined || a.errorMessage === null ? null : String(a.errorMessage),
-      createdAt: String(a.createdAt ?? new Date().toISOString()),
-      updatedAt: String(a.updatedAt ?? new Date().toISOString()),
-      correlationId: String(a.correlationId ?? ""),
-    } as LeadList;
+  async function parseErrorBody(res: Response): Promise<unknown> {
+    const contentType = res.headers.get("content-type") || "";
+    try {
+      return contentType.includes("application/json") ? await res.json() : await res.text();
+    } catch {
+      return undefined;
+    }
   }
 
   export const leadListService = {
@@ -46,42 +40,16 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
 
       const res = await fetch(`${BASE}/lead-lists?${params.toString()}`);
       if (!res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        let bodyText = "";
-        try {
-          if (contentType.includes("application/json")) {
-            const errJson = await res.json();
-            bodyText = JSON.stringify(errJson);
-          } else {
-            bodyText = await res.text();
-          }
-        } catch {
-          bodyText = "(unable to parse error body)";
-        }
-        throw new Error(`Failed to fetch lead lists: ${res.status} ${res.statusText} - ${bodyText}`);
+        const body = await parseErrorBody(res);
+        throw new Error(`Failed to fetch lead lists: ${res.status} ${res.statusText} - ${JSON.stringify(body)}`);
       }
 
-      const json = (await res.json()) as unknown;
-      let items: unknown[] | null = null;
-      if (Array.isArray(json)) items = json;
-      else if (json && typeof json === "object") {
-        const j = json as Record<string, unknown>;
-        if (Array.isArray(j.items)) items = j.items as unknown[];
-        else if (Array.isArray(j.data)) items = j.data as unknown[];
-        else if (Array.isArray(j.leadLists)) items = j.leadLists as unknown[];
-      }
+      const json = await res.json();
+      const items = Array.isArray(json) ? json : json.items ?? json.data ?? json.leadLists;
+      if (!Array.isArray(items)) throw new Error("Invalid response from API: expected array of lead lists");
+      const total = json.total ?? json.totalCount;
 
-      if (!items) throw new Error("Invalid response from API: expected array or { items|data|leadLists }");
-      const mapped = items.map(mapApiToLeadList);
-
-      let total: number | undefined = undefined;
-      if (json && typeof json === "object") {
-        const j = json as Record<string, unknown>;
-        if (typeof j.total === "number") total = j.total as number;
-        else if (typeof j.totalCount === "number") total = j.totalCount as number;
-      }
-
-      return { items: mapped, total };
+      return { items: items as LeadList[], total };
     },
 
     async getById(id: string) {
@@ -89,7 +57,7 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`Failed to fetch lead list: ${res.status}`);
       const json = await res.json();
-      return mapApiToLeadList(json);
+      return json as LeadList;
     },
 
     async create(request: CreateLeadListRequest) {
@@ -99,19 +67,12 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
         body: JSON.stringify({ name: request.name, sourceUrl: request.sourceUrl }),
       });
       if (!res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        let body: unknown = undefined;
-        try {
-          if (contentType.includes("application/json")) body = await res.json();
-          else body = await res.text();
-        } catch (parseErr) {
-          console.warn("Failed to parse error body", parseErr);
-        }
+        const body = await parseErrorBody(res);
         throw new HttpError(`Failed to create lead list: ${res.status}`, res.status, body);
       }
       const json = await res.json();
       forceReload();
-      return mapApiToLeadList(json);
+      return json as LeadList;
     },
 
     async update(id: string, request: UpdateLeadListRequest) {
@@ -122,19 +83,12 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
         body: JSON.stringify({ name: request.name, sourceUrl: request.sourceUrl }),
       });
       if (!res.ok) {
-        const contentType = res.headers.get("content-type") || "";
-        let body: unknown = undefined;
-        try {
-          if (contentType.includes("application/json")) body = await res.json();
-          else body = await res.text();
-        } catch (parseErr) {
-          console.warn("Failed to parse error body", parseErr);
-        }
+        const body = await parseErrorBody(res);
         throw new HttpError(`Failed to update lead list: ${res.status}`, res.status, body);
       }
       const json = await res.json();
       forceReload();
-      return mapApiToLeadList(json);
+      return json as LeadList;
     },
 
     async delete(id: string) {
@@ -154,7 +108,7 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
       }
       const json = await res.json();
       forceReload();
-      return mapApiToLeadList(json);
+      return json as LeadList;
     },
 
     canEdit(leadList: LeadList): boolean {

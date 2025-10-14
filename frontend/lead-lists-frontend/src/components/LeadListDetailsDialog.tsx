@@ -10,7 +10,7 @@ import {
   Link,
   Alert,
 } from "@mui/material";
-import type { LeadList } from "../lib/leadlist";
+import type { LeadList } from "../model/leadlist";
 import { StatusBadge } from "./StatusBadge";
 
 interface LeadListDetailsDialogProps {

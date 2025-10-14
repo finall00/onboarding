@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Box, TextField, Button, InputAdornment } from "@mui/material";
 
 export interface LeadListFormValues {
@@ -12,6 +12,7 @@ export interface LeadListFormProps {
   onCancel?: () => void;
   submitting?: boolean;
   submitLabel?: string;
+  debounceMs?: number;
 }
 
 export default function LeadListForm({
@@ -20,6 +21,7 @@ export default function LeadListForm({
   onCancel,
   submitting = false,
   submitLabel = "Save",
+  debounceMs = 800,
 }: LeadListFormProps) {
   const [name, setName] = useState(initial.name ?? "");
   const [sourceUrl, setSourceUrl] = useState(initial.sourceUrl ?? "");
@@ -28,6 +30,7 @@ export default function LeadListForm({
   const [isNameFocused, setIsNameFocused] = useState(false);
   const [isNameHovered, setIsNameHovered] = useState(false);
   const [isNameSelected, setIsNameSelected] = useState(false);
+  const lastSubmitRef = useRef<number>(0);
 
   useEffect(() => {
     setName(initial.name ?? "");
@@ -47,6 +50,11 @@ export default function LeadListForm({
   };
 
   const handleSubmit = async () => {
+    const now = Date.now();
+    if (now - lastSubmitRef.current < (debounceMs ?? 800)) {
+      return;
+    }
+    lastSubmitRef.current = now;
     const newErrors: { name?: string; sourceUrl?: string } = {};
     const trimmedName = name.trim();
     const trimmedUrl = sourceUrl.trim();
@@ -67,7 +75,6 @@ export default function LeadListForm({
     try {
       await onSubmit({ name: trimmedName, sourceUrl: trimmedUrl });
     } catch (err) {
-      // If caller throws structured { apiErrors: { name?: string; sourceUrl?: string } }
       if (err && typeof err === "object" && "apiErrors" in (err as Record<string, unknown>)) {
         const api = (err as Record<string, unknown>).apiErrors as Record<string, string> | undefined;
         if (api) {
@@ -83,7 +90,7 @@ export default function LeadListForm({
   };
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+    <Box component="form" onSubmit={async (e) => { e.preventDefault(); await handleSubmit(); }} sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
       <Box onMouseEnter={() => setIsNameHovered(true)} onMouseLeave={() => setIsNameHovered(false)}>
       <TextField
         label="Name"
@@ -105,7 +112,7 @@ export default function LeadListForm({
         }}
         error={!!errors.name}
         helperText={errors.name ?? emojiNotice}
-        placeholder="e.g., Lista Setembro"
+        placeholder="e.g., List"
         disabled={submitting}
         fullWidth
         autoFocus
@@ -131,10 +138,10 @@ export default function LeadListForm({
       />
 
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
-        <Button onClick={onCancel} disabled={submitting}>
+        <Button type="button" onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
-        <Button onClick={handleSubmit} variant="contained" disabled={submitting}>
+        <Button type="submit" variant="contained" disabled={submitting}>
           {submitting ? "Saving..." : submitLabel}
         </Button>
       </Box>
