@@ -12,7 +12,7 @@ public class RabbitMqPublisher : IRabbitMqPublisher
 {
     private readonly IConnectionFactory _connectionFactory;
     private readonly ILogger<RabbitMqPublisher> _logger;
-    private readonly IOptions<RabbitMqSettings> _settings;
+    private readonly RabbitMqSettings _settings;
     private IConnection _conn;
     
     
@@ -20,7 +20,7 @@ public class RabbitMqPublisher : IRabbitMqPublisher
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
-        _settings = settings;
+        _settings = settings.Value;
     }
     
     public  async Task PublishLeadList(LeadList leadList)
@@ -42,18 +42,18 @@ public class RabbitMqPublisher : IRabbitMqPublisher
                 autoDelete: false
             );
 
-            _logger.LogInformation("Declaring queue '{Queue}'", _settings.Queue);
+            _logger.LogInformation("Declaring queue '{Queue}'", _settings.QueueName);
             await chan.QueueDeclareAsync(
-                queue: _settings.Queue,
+                queue: _settings.QueueName,
                 durable: true,
                 exclusive: false,
                 autoDelete: false
             );
 
             _logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with routing key '{RoutingKey}'",
-                _settings.Queue, _settings.Exchange, _settings.RoutingKey);
+                _settings.QueueName, _settings.Exchange, _settings.RoutingKey);
             await chan.QueueBindAsync(
-                queue: _settings.Queue,
+                queue: _settings.QueueName,
                 exchange: _settings.Exchange,
                 routingKey: _settings.RoutingKey
             );
@@ -68,11 +68,11 @@ public class RabbitMqPublisher : IRabbitMqPublisher
                 DeliveryMode = DeliveryModes.Persistent
             };
             
-            _logger.LogInformation("Publishing message to exchange '{ExchangeName}' with routing key '{RoutingKey}'", _settings.Value.Exchange, _settings.Value.RoutingKey);
+            _logger.LogInformation("Publishing message to exchange '{ExchangeName}' with routing key '{RoutingKey}'", _settings.Exchange, _settings.RoutingKey);
 
             await chan.BasicPublishAsync(
-                exchange: _settings.Value.Exchange,
-                routingKey: _settings.Value.RoutingKey,
+                exchange: _settings.Exchange,
+                routingKey: _settings.RoutingKey,
                 mandatory: false,
                 body: bodyBytes
             );
