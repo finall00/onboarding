@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using Worker.Domain.DTOs;
 using Worker.Infrastructure.Data;
+using Worker.Interfaces;
 
 namespace Worker.Infrastructure.RabbitMq;
 

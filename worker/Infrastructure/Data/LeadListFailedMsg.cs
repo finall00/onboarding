@@ -1,10 +1,9 @@
 namespace Worker.Infrastructure.Data;
 
-public class LeadListFailedMsg
+public class LeadListFailedMsg(Guid LeadListId, Guid CorrelationId, DateTime CreatedAt, string SourceUrl)
 {
-    public Guid LeadListId { get; set; }
-    public Guid CorrelationId { get; set; }
-    public string SourceUrl { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
-
+    public Guid LeadListId { get; set; } = LeadListId;
+    public Guid CorrelationId { get; set; } = CorrelationId;
+    public string SourceUrl { get; set; } = SourceUrl;
+    public DateTime CreatedAt { get; set; } = CreatedAt;
 }

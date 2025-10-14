@@ -1,26 +1,29 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
+using Worker.Domain.Models;
 using Worker.Infrastructure.Data;
+using Worker.Interfaces;
 
 namespace Worker.Infrastructure.RabbitMq;
 
-public class RabbitMqPublisher
+public class RabbitMqPublisher : IRabbitMqPublisher
 {
     private readonly IConnectionFactory _connectionFactory;
     private readonly ILogger<RabbitMqPublisher> _logger;
-    private readonly RabbitMqSettings _settings;
+    private readonly IOptions<RabbitMqSettings> _settings;
     private IConnection _conn;
     
     
-    public RabbitMqPublisher(IConnectionFactory connectionFactory, ILogger<RabbitMqPublisher> logger,  RabbitMqSettings settings)
+    public RabbitMqPublisher(IConnectionFactory connectionFactory, ILogger<RabbitMqPublisher> logger, IOptions<RabbitMqSettings> settings)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _settings = settings;
     }
     
-    public  async Task PublishLeadListCreated(LeadListFailedMsg msg)
+    public  async Task PublishLeadList(LeadList leadList)
     {
         try
         {
@@ -30,16 +33,33 @@ public class RabbitMqPublisher
             }
 
             await using var chan = await _conn.CreateChannelAsync();
-            
-            _logger.LogInformation("Declaring exchange '{ExchangeName}' as topic", _settings.Exchange);
 
+            _logger.LogInformation("Declaring exchange '{Exchange}'", _settings.Exchange);
             await chan.ExchangeDeclareAsync(
                 exchange: _settings.Exchange,
                 type: ExchangeType.Topic,
                 durable: true,
-                autoDelete:false
-                );
+                autoDelete: false
+            );
 
+            _logger.LogInformation("Declaring queue '{Queue}'", _settings.Queue);
+            await chan.QueueDeclareAsync(
+                queue: _settings.Queue,
+                durable: true,
+                exclusive: false,
+                autoDelete: false
+            );
+
+            _logger.LogInformation("Binding queue '{Queue}' to exchange '{Exchange}' with routing key '{RoutingKey}'",
+                _settings.Queue, _settings.Exchange, _settings.RoutingKey);
+            await chan.QueueBindAsync(
+                queue: _settings.Queue,
+                exchange: _settings.Exchange,
+                routingKey: _settings.RoutingKey
+            );
+           
+            var msg = new LeadListFailedMsg(leadList.Id, leadList.CorrelationId, leadList.CreatedAt, leadList.SourceUrl);
+            
             var msgBody = JsonSerializer.Serialize(msg);
             var bodyBytes = Encoding.UTF8.GetBytes(msgBody);
 
@@ -47,20 +67,20 @@ public class RabbitMqPublisher
             {
                 DeliveryMode = DeliveryModes.Persistent
             };
-            _logger.LogInformation("Publishing message to exchange '{ExchangeName}' with routing key '{RoutingKey}'", _settings.Exchange, _settings.RoutingKey);
+            
+            _logger.LogInformation("Publishing message to exchange '{ExchangeName}' with routing key '{RoutingKey}'", _settings.Value.Exchange, _settings.Value.RoutingKey);
 
             await chan.BasicPublishAsync(
-                exchange: _settings.Exchange,
-                routingKey: _settings.RoutingKey,
+                exchange: _settings.Value.Exchange,
+                routingKey: _settings.Value.RoutingKey,
                 mandatory: false,
-                basicProperties: properties,
                 body: bodyBytes
             );
             
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish message to Queue. msg: {msg}", msg);
+            _logger.LogError(ex, "Failed to publish message to Queue.");
             throw;
         }
     }

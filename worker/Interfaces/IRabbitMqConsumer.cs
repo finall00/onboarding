@@ -1,6 +1,6 @@
 using Worker.Infrastructure.Data;
 
-namespace Worker.Infrastructure.RabbitMq;
+namespace Worker.Interfaces;
 
 public interface IRabbitMqConsumer : IDisposable
 {
