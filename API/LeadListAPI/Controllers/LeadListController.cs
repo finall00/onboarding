@@ -15,7 +15,6 @@ public class LeadListController : ControllerBase
     
     private readonly IValidator<LeadListCreateRequest> _leadListValidator;
 
-
     public LeadListController(
         ILogger<LeadListController> logger,
         ILeadListService leadListService,
@@ -50,7 +49,6 @@ public class LeadListController : ControllerBase
         return Ok(result);
     }
 
-
     /// <summary>
     /// Retrieves a specific lead list by its unique ID.
     /// </summary>
@@ -71,7 +69,6 @@ public class LeadListController : ControllerBase
 
         return Ok(leadList);
     }
-
 
     /// <summary>
     /// Creates a new lead list.
@@ -109,8 +106,6 @@ public class LeadListController : ControllerBase
         return BadRequest(errorMessage);
     }
 
-    
-    // TODO: pergutar se poder reenserir p valor caso seja vazio a resposta 
     /// <summary>
     /// Updates an existing lead list.
     /// </summary>
@@ -151,7 +146,6 @@ public class LeadListController : ControllerBase
         return BadRequest(new { message = errorMessage });
     }
 
-
     /// <summary>
     /// Deletes a lead list.
     /// </summary>
@@ -180,7 +174,6 @@ public class LeadListController : ControllerBase
 
         return BadRequest(new { message = errorMessage });
     }
-
 
     /// <summary>
     /// Triggers the reprocessing of a failed lead list.

@@ -4,13 +4,14 @@ using leadListAPI.Domain.Models;
 using leadListAPI.Infrastructure.Data;
 using leadListAPI.Interfaces;
 using leadListAPI.Services;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace LeadListAPI_test.Services;
 
-public class LeadListServiceTests 
+public class LeadListServiceTests
 {
     private readonly AppDbContext _context;
     private readonly Mock<ILogger<LeadListService>> _loggerMock;
@@ -19,10 +20,15 @@ public class LeadListServiceTests
 
     public LeadListServiceTests()
     {
+        var conn = new SqliteConnection("DataSource=:memory:");
+        conn.Open();
+
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseSqlite(conn)
             .Options;
+
         _context = new AppDbContext(options);
+        _context.Database.EnsureCreated();
 
         _loggerMock = new Mock<ILogger<LeadListService>>();
         _jobCreatorMock = new Mock<IJobCreator>();
@@ -30,7 +36,7 @@ public class LeadListServiceTests
         _service = new LeadListService(_context, _loggerMock.Object, _jobCreatorMock.Object);
     }
 
-   
+
     //GetAll Tests
     [Fact]
     public async Task GetAll_ShouldReturnAllLead_WhenNoFiltersAreApplied()
@@ -40,7 +46,7 @@ public class LeadListServiceTests
             new LeadList { Id = Guid.NewGuid(), Name = "batata" },
             new LeadList { Id = Guid.NewGuid(), Name = "Kiwi" }
         };
-        
+
         _context.LeadLists.AddRange(leadLists);
         await _context.SaveChangesAsync();
 
@@ -59,16 +65,16 @@ public class LeadListServiceTests
             new LeadList { Id = Guid.NewGuid(), Name = "batata Completed 1", Status = LeadListStatus.Completed },
             new LeadList { Id = Guid.NewGuid(), Name = "batata Pending 2", Status = LeadListStatus.Pending }
         };
-        
+
         _context.LeadLists.AddRange(leadLists);
         await _context.SaveChangesAsync();
-        
+
         var result = await _service.GetAll(page: 1, pageSize: 10, status: "Pending", q: null);
 
         result.Items.Should().HaveCount(2);
         result.Items.Should().OnlyContain(item => item.Status == "Pending");
     }
-    
+
     [Fact]
     public async Task GetAll_ShouldReturnFilteredLead_WhenQueryFilterIsApplied()
     {
@@ -80,7 +86,7 @@ public class LeadListServiceTests
         };
         _context.LeadLists.AddRange(leadLists);
         await _context.SaveChangesAsync();
-        
+
         var result = await _service.GetAll(page: 1, pageSize: 10, status: null, q: "batata");
 
         result.Items.Should().HaveCount(2);
@@ -94,31 +100,34 @@ public class LeadListServiceTests
         var leadList = new LeadList { Id = leadListId, Name = "Target Item" };
         _context.LeadLists.Add(leadList);
         await _context.SaveChangesAsync();
-        
+
         var result = await _service.GetById(leadListId);
-        
+
         result.Should().NotBeNull();
         result!.Id.Should().Be(leadListId);
         result.Name.Should().Be("Target Item");
     }
 
-    //Create Test
-    // [Fact]
-    // public async Task Create_ShouldCreateSuccessfully()
-    // {
-    //     var leadList = new LeadListCreateRequest
-    //     {
-    //         Name = "Batata",
-    //         SourceUrl = "http://batatas.com"
-    //     };
-    //     
-    //     var (response, errorMessage) = await _service.Create(leadList);
-    //
-    //     response.Should().NotBeNull();
-    //     errorMessage.Should().BeNull();
-    //     response.Name.Should().Be("Batata");
-    //     response.SourceUrl.Should().Be("http://batatas.com");
-    // }
+    // Create Test
+    [Fact]
+    public async Task Create_ShouldCreateSuccessfully()
+    {
+        var leadList = new LeadListCreateRequest
+        {
+            Name = "Batata",
+            SourceUrl = "http://batatas.com"
+        };
+
+        var (response, errorMessage) = await _service.Create(leadList);
+
+        response.Should().NotBeNull();
+        errorMessage.Should().BeNull();
+        response.Name.Should().Be("Batata");
+        response.SourceUrl.Should().Be("http://batatas.com");
+        
+        var saved = await _context.LeadLists.FindAsync(response.Id);
+        saved.Should().NotBeNull();
+    }
     
     // Update Test
     [Fact]
@@ -128,8 +137,8 @@ public class LeadListServiceTests
         var leadList = new LeadList { Id = leadListId, Name = "batata podre", Status = LeadListStatus.Pending };
         _context.LeadLists.Add(leadList);
         await _context.SaveChangesAsync();
-        
-        
+
+
         var request = new LeadListCreateRequest { Name = "batata doce", SourceUrl = "https://new.com" };
         var (response, errorMessage) = await _service.Update(leadListId, request);
 
@@ -145,12 +154,13 @@ public class LeadListServiceTests
         var leadList = new LeadList { Id = leadListId, Name = "batata podre", Status = LeadListStatus.Completed };
         _context.LeadLists.Add(leadList);
         await _context.SaveChangesAsync();
-        
+
         var request = new LeadListCreateRequest { Name = "batata doce", SourceUrl = "https://new.com" };
         var (response, errorMessage) = await _service.Update(leadListId, request);
 
         response.Should().BeNull();
-        errorMessage.Should().Be($"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
+        errorMessage.Should()
+            .Be($"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
     }
 
     [Fact]
@@ -162,7 +172,7 @@ public class LeadListServiceTests
         response.Should().BeNull();
         errorMessage.Should().Be("Lead list not found");
     }
-  
+
     // Delete Tests
     [Fact]
     public async Task Delete_ShouldRemoveItem_WhenItemExistsAndIsPending()
@@ -176,11 +186,11 @@ public class LeadListServiceTests
 
         success.Should().BeTrue();
         errorMessage.Should().BeNull();
-        
+
         var deletedItem = await _context.LeadLists.FindAsync(leadListId);
         deletedItem.Should().BeNull();
     }
-    
+
     [Fact]
     public async Task Delete_ShouldRemoveItem_WhenItemExistsAndIsFailed()
     {
@@ -193,12 +203,12 @@ public class LeadListServiceTests
 
         success.Should().BeTrue();
         errorMessage.Should().BeNull();
-        
+
         var deletedItem = await _context.LeadLists.FindAsync(leadListId);
         deletedItem.Should().BeNull();
     }
 
-    
+
     [Fact]
     public async Task Delete_ShouldFailed_WhenStatusIsNotPending()
     {
@@ -210,7 +220,7 @@ public class LeadListServiceTests
         var (success, errorMessage) = await _service.Delete(leadListId);
 
         success.Should().BeFalse();
-        errorMessage.Should().Contain($"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
+        errorMessage.Should()
+            .Contain($"Cannot delete lead list with status {leadList.Status}. Only Pending or Failed are allowed.");
     }
-    
 }
