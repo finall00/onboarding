@@ -17,19 +17,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout do código
+    - name: code checkout
       uses: actions/checkout@v4
 
-    - name: Configurar o ambiente .NET
+    - name: .NET enviroment config
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '9.0' 
 
-    - name: Restaurar dependências
-      run: dotnet restore
+    - name: Restore dependencies
+      working-directory: ./API
+      run: dotnet restore LeadListAPI.sln
 
-    - name: Compilar o projeto (Build)
-      run: dotnet build --configuration Release --no-restore
+    - name: Build
+      working-directory: ./API
+      run: dotnet build LeadListAPI.sln --configuration Release --no-restore
 
-    - name: Rodar os testes
+    - name: Run Tests
+      working-directory: ./API/LeadListAPI-test
       run: dotnet test --configuration Release --no-build --verbosity normal
