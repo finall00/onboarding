@@ -32,6 +32,30 @@ Esta é a melhor forrma para desenvolver e testar a API, o Worker e o Frontend.
 
 O comando abaixo irá iniciar os contêineres do **Postgres** e **RabbitMQ** em background.
 
+antes de executar, configurer o arquivo `.env` na raiz do projeto, se necessário.
+
+```zsh
+cp .env.example .env
+```
+
+`.env.example`:
+
+```env
+# PostgreSQL
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=<db_name>
+POSTGRES_USER=<user>
+POSTGRES_PASSWORD=<pass>
+
+# RabbitMQ
+RABBITMQ_HOST=localhost
+RABBITMQ_USER=guest
+RABBITMQ_PASS=guest
+```
+
+
+Agora, inicie os serviços com Docker Compose:
 
 ```zsh
 docker-compose up -d
