@@ -45,7 +45,7 @@ function App() {
   const [page, setPage] = useState(0);
   const defaultPageSize = Number(import.meta.env.VITE_PAGE_SIZE ?? 10) || 10;
   const [pageSize, setPageSize] = useState(defaultPageSize);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("All Statuses");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -202,7 +202,9 @@ function App() {
           Lead Lists
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Lorem ipsum dolor sit amet consectetur adipisicing elit. At tempore fugiat id consequatur veniam vel veritatis corrupti libero, illo, eum harum ea ratione impedit rem, optio provident in deserunt. Fuga.
+          Lorem ipsum dolor sit amet consectetur adipisicing elit. At tempore
+          fugiat id consequatur veniam vel veritatis corrupti libero, illo, eum
+          harum ea ratione impedit rem, optio provident in deserunt. Fuga.
         </Typography>
       </Box>
 
@@ -232,15 +234,15 @@ function App() {
             size="small"
             sx={{ minWidth: 150 }}
           >
-            <MenuItem value="">All Statuses</MenuItem>
+            <MenuItem value="All Statuses">All Statuses</MenuItem>
             <MenuItem value="Pending">Pending</MenuItem>
             <MenuItem value="Processing">Processing</MenuItem>
             <MenuItem value="Completed">Completed</MenuItem>
             <MenuItem value="Failed">Failed</MenuItem>
           </TextField>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-              <IconButton
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+            <IconButton
               size="small"
               onClick={async () => {
                 setIsLoading(true);
@@ -304,10 +306,16 @@ function App() {
             </TableHead>
             <TableBody>
               {leadLists.map((leadList) => (
-                <TableRow key={leadList.id} hover onClick={() => openDetailsDialog(leadList)} sx={{ cursor: 'pointer' }}>
+                <TableRow
+                  key={leadList.id}
+                  hover
+                  onClick={() => openDetailsDialog(leadList)}
+                  sx={{ cursor: "pointer" }}
+                >
                   <TableCell>
                     <Typography variant="body2" fontWeight="medium">
-                      {leadList.name.slice(0, 50)}{leadList.name.length > 50 ? "…" : ""}
+                      {leadList.name.slice(0, 50)}
+                      {leadList.name.length > 50 ? "…" : ""}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -408,20 +416,26 @@ function App() {
               ))}
             </TableBody>
           </Table>
-            <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1 }}>
-              <TablePagination
-                component="div"
-                count={typeof totalCount === "number" ? totalCount : leadLists.length}
-                page={page}
-                onPageChange={(_event: unknown, newPage: number) => setPage(newPage)}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(0);
-                }}
-                rowsPerPageOptions={[5, 10, 25, 50]}
-              />
-            </Box>
+          <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1 }}>
+            <TablePagination
+              component="div"
+              count={
+                typeof totalCount === "number" ? totalCount : leadLists.length
+              }
+              page={page}
+              onPageChange={(_event: unknown, newPage: number) =>
+                setPage(newPage)
+              }
+              rowsPerPage={pageSize}
+              onRowsPerPageChange={(
+                e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+              ) => {
+                setPageSize(Number(e.target.value));
+                setPage(0);
+              }}
+              rowsPerPageOptions={[5, 10, 25, 50]}
+            />
+          </Box>
         </TableContainer>
       )}
 
