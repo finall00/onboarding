@@ -1,29 +1,4 @@
 services:
-  api:
-    container_name: leadlist-api
-    build:
-      context: ./API/LeadListAPI
-      dockerfile: Dockerfile
-    #    image: finall00/leadlist-api:latest
-    ports:
-      - "${API_PORT}:8080"
-    environment:
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
-      RabbitMq__Host: "rabbitmq"
-      RabbitMq__User: "${RABBITMQ_USER}"
-      RabbitMq__Password: "${RABBITMQ_PASS}"
-      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT}"
-      ASPNETCORE_URLS: "http://+:8080"
-      JobRunner: "Docker"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - leadlists-net
-    restart: unless-stopped
-  
   postgres:
     image: postgres:15
     container_name: postgres_data
@@ -54,8 +29,6 @@ services:
       - "${RABBITMQ_PORT}:5672"
       - "${RABBITMQ_UI_PORT}:15672"
     volumes:
-      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - leadlists-net
