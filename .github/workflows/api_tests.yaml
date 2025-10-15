@@ -1,0 +1,35 @@
+name: .NET CI - Build e Testes
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'API/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'API/**'
+      - '.github/workflows/**'
+
+jobs:
+  build-e-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    - name: Configurar o ambiente .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0' 
+
+    - name: Restaurar dependências
+      run: dotnet restore
+
+    - name: Compilar o projeto (Build)
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Rodar os testes
+      run: dotnet test --configuration Release --no-build --verbosity normal
