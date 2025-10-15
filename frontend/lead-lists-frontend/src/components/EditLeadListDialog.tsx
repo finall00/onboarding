@@ -18,15 +18,18 @@ export function EditLeadListDialog({ isOpen, onClose, onSubmit, leadList }: Edit
     try {
       await onSubmit(values);
       onClose();
-    } catch (error) {
-      const apiErrors = (error as any)?.body?.errors;
-      if (apiErrors) {
-        throw {
-          apiErrors: {
-            name: (apiErrors.name || apiErrors.Name || []).join(" "),
-            sourceUrl: (apiErrors.sourceUrl || apiErrors.SourceUrl || []).join(" ")
-          }
-        };
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "body" in error) {
+        const body = (error as Record<string, unknown>).body as Record<string, unknown> | undefined;
+        const apiErrors = body?.errors as Record<string, string[]> | undefined;
+        if (apiErrors) {
+          throw {
+            apiErrors: {
+              name: (apiErrors.name || apiErrors.Name || []).join(" "),
+              sourceUrl: (apiErrors.sourceUrl || apiErrors.SourceUrl || []).join(" ")
+            }
+          };
+        }
       }
       throw error;
     } finally {

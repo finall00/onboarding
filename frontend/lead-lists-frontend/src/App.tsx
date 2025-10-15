@@ -214,12 +214,14 @@ function App() {
             onChange={(e) => setSearchQuery(e.target.value)}
             size="small"
             sx={{ flex: { xs: "1 1 100%", sm: "1 1 auto" }, minWidth: 200 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              },
             }}
           />
 

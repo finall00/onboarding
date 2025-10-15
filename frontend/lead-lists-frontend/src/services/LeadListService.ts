@@ -4,7 +4,7 @@ import type {
   UpdateLeadListRequest,
 } from "../model/leadlist";
 
-const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_BASE as string) || "http://localhost:8080";
+const BASE = (import.meta.env.VITE_API as string) || "http://localhost:8080";
 
   class HttpError extends Error {
     status?: number;
@@ -76,11 +76,9 @@ const BASE = (import.meta.env.VITE_API as string) || (import.meta.env.VITE_API_B
     },
 
     async update(id: string, request: UpdateLeadListRequest) {
-      const url = `${BASE}/lead-lists/${id}`;
+      const url = `${BASE}/lead-lists/${id}?Name=${encodeURIComponent(request.name)}&SourceUrl=${encodeURIComponent(request.sourceUrl)}`;
       const res = await fetch(url, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: request.name, sourceUrl: request.sourceUrl }),
       });
       if (!res.ok) {
         const body = await parseErrorBody(res);

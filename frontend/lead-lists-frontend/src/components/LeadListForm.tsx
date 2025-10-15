@@ -38,12 +38,13 @@ export default function LeadListForm({
     setErrors({});
   }, [initial]);
 
-  const removeEmojis = (s: string) => s.replace(/\p{Emoji}/gu, "").replace(/\uFE0F/g, "");
+  const removeEmojis = (s: string) =>
+    s.replace(/\p{Extended_Pictographic}/gu, "").replace(/\uFE0F/g, "");
 
   const validateUrl = (url: string): boolean => {
     try {
-      new URL(url);
-      return true;
+      const parsedUrl = new URL(url);
+      return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
     } catch {
       return false;
     }
@@ -76,12 +77,19 @@ export default function LeadListForm({
       await onSubmit({ name: trimmedName, sourceUrl: trimmedUrl });
     } catch (err) {
       if (err && typeof err === "object" && "apiErrors" in (err as Record<string, unknown>)) {
-        const api = (err as Record<string, unknown>).apiErrors as Record<string, string> | undefined;
-        if (api) {
-          setErrors({
-            name: api.name ?? api.Name ?? undefined,
-            sourceUrl: api.sourceUrl ?? api.SourceUrl ?? undefined,
+        const apiErrors = (err as Record<string, unknown>).apiErrors;
+        if (Array.isArray(apiErrors)) {
+          const errorsObj: { [key: string]: string } = {};
+          apiErrors.forEach((errorItem) => {
+            const propName = errorItem.propertyName?.toLowerCase();
+            if (propName) {
+              errorsObj[propName] = errorItem.errorMessage;
+            }
           });
+          setErrors(errorsObj);
+          return;
+        } else if (apiErrors && typeof apiErrors === "object") {
+          setErrors(apiErrors as { name?: string; sourceUrl?: string });
           return;
         }
       }
@@ -92,47 +100,64 @@ export default function LeadListForm({
   return (
     <Box component="form" onSubmit={async (e) => { e.preventDefault(); await handleSubmit(); }} sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
       <Box onMouseEnter={() => setIsNameHovered(true)} onMouseLeave={() => setIsNameHovered(false)}>
-      <TextField
-        label="Name"
-        value={name}
-        onChange={(e) => {
-          const raw = e.target.value;
-          const cleaned = removeEmojis(raw);
-          if (cleaned.length !== raw.length) {
-            setEmojiNotice("Emojis were removed from the name");
-            setTimeout(() => setEmojiNotice(null), 2000);
-          }
-          setName(cleaned.slice(0, 100));
-        }}
-        onFocus={() => setIsNameFocused(true)}
-        onBlur={() => setIsNameFocused(false)}
-        inputProps={{
-          onSelect: () => setIsNameSelected(true),
-          onBlur: () => setIsNameSelected(false),
-        }}
-        error={!!errors.name}
-        helperText={errors.name ?? emojiNotice}
-        placeholder="e.g., List"
-        disabled={submitting}
-        fullWidth
-        autoFocus
-        InputProps={{
-          endAdornment: (isNameFocused || isNameHovered || isNameSelected) ? (
-            <InputAdornment position="end" sx={{ fontSize: 12, color: "text.secondary" }}>
-              {`${name.length}/100`}
-            </InputAdornment>
-          ) : undefined,
-        }}
-      />
+        <TextField
+          label="Name"
+          value={name}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const cleaned = removeEmojis(raw);
+            if (cleaned.length !== raw.length) {
+              setEmojiNotice("Emojis were removed from the name");
+              setTimeout(() => setEmojiNotice(null), 2000);
+            }
+            setName(cleaned.slice(0, 100));
+          }}
+          onFocus={() => setIsNameFocused(true)}
+          onBlur={() => setIsNameFocused(false)}
+          slotProps={{
+            input: {
+              endAdornment: (isNameFocused || isNameHovered || isNameSelected) ? (
+                <InputAdornment position="end" sx={{ fontSize: 12, color: "text.secondary" }}>
+                  {`${name.length}/100`}
+                </InputAdornment>
+              ) : undefined,
+            },
+            htmlInput: {
+              onSelect: () => setIsNameSelected(true),
+              onBlur: () => setIsNameSelected(false),
+            },
+            select: undefined,
+            inputLabel: undefined,
+            formHelperText: undefined,
+          }}
+          error={!!errors.name}
+          helperText={errors.name ?? emojiNotice}
+          placeholder="e.g., List"
+          disabled={submitting}
+          fullWidth
+          autoFocus
+        />
       </Box>
 
       <TextField
         label="Source URL"
         value={sourceUrl}
         onChange={(e) => setSourceUrl(e.target.value)}
+        onBlur={() => {
+          const trimmedUrl = sourceUrl.trim();
+          if (!trimmedUrl) {
+            setErrors(prev => ({ ...prev, sourceUrl: "Source URL is required" }));
+          } else if (!validateUrl(trimmedUrl)) {
+            setErrors(prev => ({ ...prev, sourceUrl: "Please enter a valid URL" }));
+          } else if (trimmedUrl.length > 500) {
+            setErrors(prev => ({ ...prev, sourceUrl: "URL must be 500 characters or less" }));
+          } else {
+            setErrors(prev => ({ ...prev, sourceUrl: undefined }));
+          }
+        }}
         error={!!errors.sourceUrl}
         helperText={errors.sourceUrl}
-        placeholder="https://example.com/leads.csv"
+        placeholder="https://coolsite.com/leads.csv"
         disabled={submitting}
         fullWidth
       />
