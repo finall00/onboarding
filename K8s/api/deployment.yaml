@@ -28,8 +28,7 @@ spec:
 #                  key: POSTGRES_PASSWORD
       containers:
         - name: api
-          image: finall00/leadlist-api:latest
-          imagePullPolicy: IfNotPresent
+          image: finall00/leadlist-api:latest 
           ports:
             - containerPort: 8080
           env:

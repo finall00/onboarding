@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: dev
+data:
+  rabbitmq.conf: |
+    loopback_users = none
+    management.load_definitions = /etc/rabbitmq/definitions.json
+
+  definitions.json: |-  
+    {
+      "users": [
+        {
+          "name": "guest",
+          "password_hash": "b0vkxCf3wLbsY6yQgZrH6qILahYRQTblPKTIsgHJ7arnbrY7",
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "tags": ["administrator"]
+        }
+      ],
+      "vhosts": [{"name": "/"}],
+      "permissions": [{"user": "guest", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*"}],
+      "exchanges": [
+        {
+          "name": "leadlists", "vhost": "/", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {}
+        }
+      ],
+      "queues": [
+        {
+          "name": "leadlists.worker", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {}
+        }
+      ],
+      "bindings": [
+        {
+          "source": "leadlists", "vhost": "/", "destination": "leadlists.worker", "destination_type": "queue", "routing_key": "leadlist.failed", "arguments": {}
+        }
+      ]
+    }
