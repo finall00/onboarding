@@ -15,14 +15,12 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Postgres
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<ILeadListService, LeadListService>();
 builder.Services.AddScoped<IRabbitMqPublisher, RabbitMqPublisher>();
 
-//Select Job Runner
 var jobRunner = builder.Configuration.GetValue<string>("JobRunner");
 switch (jobRunner?.ToLower())
 {
@@ -34,28 +32,24 @@ switch (jobRunner?.ToLower())
         break;
 }
 
-// FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-//RabbitMQ load settings
 builder.Services.Configure<RabbitMqSettings>(builder.Configuration.GetSection("RabbitMq"));
 
-// RabbitMQ
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<RabbitMqSettings>>().Value;
     Console.WriteLine(settings.Host);
     return new ConnectionFactory
     {
-        HostName = settings.Host,
+        HostName = settings.Host!,
         Port = settings.Port,
-        UserName = settings.User,
-        Password = settings.Pass,
+        UserName = settings.User!,
+        Password = settings.Pass!,
         ConsumerDispatchConcurrency = Constants.DefaultConsumerDispatchConcurrency
     };
 });
 
-// CORS config
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
 
 Console.WriteLine(allowedOrigins);
@@ -73,15 +67,14 @@ builder.Services.AddCors(opt =>
 
 var app = builder.Build();
 
-// TODO: remove true
-if (app.Environment.IsDevelopment() || true)
+if (app.Environment.IsDevelopment() ||  app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+    
+using var scope = app.Services.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+await db.Database.MigrateAsync();
 }
 
 app.UseCors("AllowFrontend");
