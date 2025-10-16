@@ -54,17 +54,15 @@ RABBITMQ_USER=guest
 RABBITMQ_PASS=guest
 ```
 
-
 Agora, inicie os serviços com Docker Compose:
 
 ```zsh
 docker-compose up -d
 ```
 
-#### Rodar a API
+#### API
 
 Navegue até o diretorio da API, aplique as migrações do banco de dados e inicie a aplicação.
-
 
 ```zsh
 cd API/LeadListAPI
@@ -78,16 +76,14 @@ dotnet watch run
 
 A documentação da API estará disponível em: `http://localhost:5267/swagger`
 
-#### Rodar o Worker
+#### Worker
 
 O Worker é o serviço que processa as listas em background. Assim que uma leadList é criada um novo worker roda.
-
 Para rodar o worker localmente, mude a variavel `jobRunner`  no   arquivo `appsettings.Development.json` para `Local`.
 
+#### Frontend
 
-#### Rodar o Frontend
-
-Finalmente, em outro terminal, inicie a aplicação React.
+Para rodar o frontend, em outro terminal, inicie a aplicação React.
 
 
 ```zsh
@@ -95,7 +91,24 @@ cd frontend/lead-lists-frontend
 
 # Instala as dependências
 npm install
+```
+Antes de iniciar o frontend, certifique-se de que a API está rodando e atualize a variável `VITE_API_BASE_URL` no arquivo `.env` na raiz do projeto frontend, se necessário.
 
+```zsh
+cp .env.example .env
+```
+
+`.env.example`:
+
+```zsh
+VITE_API=http://localhost:8080
+VITE_POLL_MS=30000
+VITE_PAGE_SIZE=10
+```
+
+Agora, inicie o servidor de desenvolvimento:
+
+```zsh
 # Inicia o servidor de desenvolvimento
 npm run dev
 ```
@@ -108,21 +121,6 @@ Acesse a aplicação em: `http://localhost:5173`
 
 Este modo simula um deploy completo em um ambiente de produção, orquestrando todos os serviços dentro de um cluster Kubernetes.
 
-> [!INFO] 
-> As imagens já estão prontas e publicadas no Docker Hub, caso queira buildar e importar a imagem local, mude a origem das imagens no `K8s/api/deployment.yaml`.
-
-#### Build e Importação das Imagens
-
-O k3d roda em seu próprio ambiente Docker e não tem acesso direto às imagens que você constrói localmente. Portanto, primeiro precisamos construir as imagens da API e do Worker e depois importá-las para o cluster.
-
-
-```zsh
-# Construir a imagem da API
-docker build -t leadlist-api:local ./API/LeadListAPI
-
-# Construir a imagem do Worker
-docker build -t leadlist-worker:local ./worker
-```
 
 #### Criar o Cluster k3d
 
@@ -140,15 +138,29 @@ Este comando cria um namespace chamado `dev` para isolar os recursos da aplicaç
 kubectl create namespace dev
 ```
 
-#### Importar as Imagens para o Cluster
+#### Build e Importação das Imagens
 
-Agora, importe as imagens que você acabou de construir.
+> [!INFO] 
+> As imagens já estão prontas e publicadas no Docker Hub, caso queira buildar e importar a imagem local, mude a origem das imagens no `K8s/api/deployment.yaml`.
 
+
+O k3d roda em seu próprio ambiente Docker e não tem acesso direto às imagens que você constrói localmente. Portanto, primeiro precisamos construir as imagens da API e do Worker e depois importá-las para o cluster.
+
+```zsh
+# Construir a imagem da API
+docker build -t leadlist-api:local ./API/LeadListAPI
+
+# Construir a imagem do Worker
+docker build -t leadlist-worker:local ./worker
+```
+
+Agora, importe as imagens.
 
 ```zsh
 k3d image import leadlist-api:local -c leadlists
 k3d image import leadlist-worker:local -c leadlists
 ```
+
 
 #### Aplicar os Manifestos do Kubernetes
 
