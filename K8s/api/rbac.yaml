@@ -7,8 +7,8 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: dev
   name: job-manager
+  namespace: dev
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]

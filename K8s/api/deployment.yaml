@@ -14,18 +14,6 @@ spec:
         app: api
     spec:
       serviceAccountName: api-sa
-#      initContainers:
-#        - name: migrate-db
-#          image: finall00/leadlist-api:latest
-#          command: ["dotnet", "ef", "database", "update"]
-#          env:
-#            - name: ConnectionStrings__DefaultConnection
-#              value: "Host=postgres.dev;Database=leadlists;Username=postgres;Password=$(POSTGRES_PASSWORD)"
-#            - name: POSTGRES_PASSWORD
-#              valueFrom:
-#                secretKeyRef:
-#                  name: postgres-secret
-#                  key: POSTGRES_PASSWORD
       containers:
         - name: api
           image: finall00/leadlist-api:latest 

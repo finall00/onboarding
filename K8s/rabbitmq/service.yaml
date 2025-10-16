@@ -4,6 +4,7 @@ metadata:
   name: rabbitmq
   namespace: dev
 spec:
+  type: NodePort
   selector:
     app: rabbitmq
   ports:
@@ -14,4 +15,3 @@ spec:
       port: 15672
       nodePort: 31567
       targetPort: 15672
-  type: NodePort
