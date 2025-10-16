@@ -139,7 +139,7 @@ public class LeadListServiceTests
         await _context.SaveChangesAsync();
 
 
-        var request = new LeadListCreateRequest { Name = "batata doce", SourceUrl = "https://new.com" };
+        var request = new LeadListCreateRequest { Name = "batata doce", SourceUrl = "https://bata.com" };
         var (response, errorMessage) = await _service.Update(leadListId, request);
 
         response.Should().NotBeNull();

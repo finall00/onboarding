@@ -13,8 +13,8 @@ public class LeadListService : ILeadListService
     private readonly IJobCreator _jobCreator;
 
     public LeadListService(
-        AppDbContext context, 
-        ILogger<LeadListService> logger, 
+        AppDbContext context,
+        ILogger<LeadListService> logger,
         IJobCreator jobCreator)
     {
         _context = context;
@@ -113,17 +113,28 @@ public class LeadListService : ILeadListService
         }
 
         if (!leadList.IsEditable())
-            return (null, $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
+            return (null,
+                $"Cannot update lead list with the status {leadList.Status}. Only Pending or Failed can be updated");
 
         leadList.Name = request.Name.Trim();
         leadList.SourceUrl = request.SourceUrl.Trim();
         leadList.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        _logger.LogInformation("Lead list {LeadListId} updated", leadList.Id);
-
-        return (MapToResponse(leadList), null);
+        try
+        {
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Lead list {LeadListId} updated", leadList.Id);
+            await transaction.CommitAsync();
+            return (MapToResponse(leadList), null);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Failed to update lead list and publish message");
+            return (null, "Failed to save the lead list.");
+        }
     }
 
     public async Task<(bool Success, string? ErrorMessage)> Delete(Guid id)
@@ -155,14 +166,15 @@ public class LeadListService : ILeadListService
         }
 
         if (leadList.Status != LeadListStatus.Failed)
-            return (null, $"Cannot reprocess lead list with status {leadList.Status}. Only Failed list can be reprocessed. ");
+            return (null,
+                $"Cannot reprocess lead list with status {leadList.Status}. Only Failed list can be reprocessed. ");
 
         leadList.Status = LeadListStatus.Pending;
         leadList.ProcessedCount = 0;
         leadList.ErrorMessage = null;
         leadList.CorrelationId = Guid.NewGuid();
         leadList.UpdatedAt = DateTime.UtcNow;
-        
+
         var msg = new LeadListCreatedMsg
         {
             LeadListId = leadList.Id,
@@ -189,13 +201,13 @@ public class LeadListService : ILeadListService
             return (null, "Failed to save the lead list.");
         }
     }
-    
+
     private async Task CreateJobAsync(LeadList leadList, LeadListCreatedMsg msg)
     {
         // await _rabbitMqPublisher.PublishLeadListCreated(msg);
         await _jobCreator.CreateWorkerJobAsync(leadList.Id, leadList.CorrelationId);
     }
-    
+
     private static LeadListResponse MapToResponse(LeadList leadList) =>
         new()
         {
