@@ -1,9 +1,10 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: rabbitmq
   namespace: dev
 spec:
+  serviceName: "rabbitmq"
   replicas: 1
   selector:
     matchLabels:
@@ -56,18 +57,12 @@ spec:
         - name: rabbitmq-config-volume
           configMap:
             name: rabbitmq-config
-        - name: rabbitmq-data
-          persistentVolumeClaim:
-            claimName: rabbitmq-pvc
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: rabbitmq-data
-  namespace: dev
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
+
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
